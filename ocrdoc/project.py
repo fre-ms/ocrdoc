@@ -203,6 +203,7 @@ class Project:
         self.frames = _frames(doc)
         self.dropped: list[int] = []  # pages whose decisions went: their frame changed
         self.scratch: Path | None = None  # where a page may be written for a moment
+        self.models: Path | None = None  # the folder of models the finders may use
         self._layer: dict[int, bool] = {}
         self._needs: dict[int, bool] = {}
         self._engine: ocrlib.OCRBackend | None = None

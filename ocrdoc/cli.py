@@ -24,10 +24,12 @@ from pathlib import Path
 from typing import Any
 
 from doccor import cli as frame
+from doccor import models as modelstore
 
 from ocrdoc import __version__, areas, filters, tables
 from ocrdoc import ocr as ocrlib
 from ocrdoc.errors import OcrdocError
+from ocrdoc.models import CATALOGUE
 from ocrdoc.project import SUFFIX, Options, Project, load_config
 
 INTERFACE = 1  # the version of docs/interface.md the answers follow
@@ -40,7 +42,8 @@ def _about(args: argparse.Namespace) -> dict[str, Any]:
 
     return {"version": __version__, "readers": ocrlib.available_backends(),
             "filters": filters.available(), "tables": tables.available(),
-            "barcodes": areas.barcodes_available(), "window": gui.available()}
+            "barcodes": areas.barcodes_available(), "window": gui.available(),
+            "models": modelstore.listing(CATALOGUE)}
 
 
 # the options that decide the result; with --config the configuration decides them
@@ -56,6 +59,7 @@ def _project(args: argparse.Namespace) -> Project:
             raise OcrdocError("usage")
         project = Project.open(args.file, config=load_config(args.config))
         project.scratch = _out(args)  # nothing of the document anywhere but there
+        project.models = args.models
         if args.no_cells:  # as before the configuration held it: no tables found
             project.leave_out_found_tables()
         return project
@@ -64,6 +68,7 @@ def _project(args: argparse.Namespace) -> Project:
                       cells=not args.no_cells, areas=not args.no_areas)
     project = Project.open(args.file, options)
     project.scratch = _out(args)  # nothing of the document anywhere but there
+    project.models = args.models
     return project
 
 
@@ -159,6 +164,7 @@ def _document_options(pr: argparse.ArgumentParser) -> None:
     pr.add_argument("--no-areas", action="store_const", const=True,
                     help="find no barcodes, stamps, pictures or handwriting; "
                          "a person can still set them in the window")
+    frame.add_models_option(pr)
     pr.add_argument("--progress", action="store_true",
                     help='a line {"page": n, "of": m} on standard error per page')
 
@@ -178,6 +184,7 @@ def _parser() -> argparse.ArgumentParser:
     ed.add_argument("--language", choices=["de", "en"],
                     help="language of the window (default: the system's)")
     ed.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
+    frame.add_models(sub, TOOL)
     be = sub.add_parser("bench", help="score readings against truth files (numbers only)")
     be.add_argument("folder", type=Path, help="PDFs with a <name>.truth.txt next to each")
     be.add_argument("--reader", action="append", choices=["rapidocr", "tesseract"],
@@ -186,7 +193,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 COMMANDS: dict[str, Callable[[argparse.Namespace], dict[str, Any]]] = {
-    "about": _about, "run": _run, "edit": _edit, "bench": _bench}
+    "about": _about, "run": _run, "edit": _edit, "bench": _bench,
+    "models": frame.models_command(CATALOGUE, TOOL)}
 
 
 def main(argv: Sequence[str] | None = None) -> int:

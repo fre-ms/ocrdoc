@@ -48,7 +48,8 @@ def test_about(capsys: pytest.CaptureFixture[str]) -> None:
     status, answer, _ = _answer(capsys, ["about"])
     assert status == 0
     assert set(answer) == HEAD | {"version", "readers", "filters", "tables", "barcodes",
-                                  "window"}
+                                  "window", "models"}
+    assert isinstance(answer["models"], list)
     assert answer["interface"] == INTERFACE and answer["version"] == __version__
     assert answer["made_with"] == f"ocrdoc {__version__}"
     assert set(answer["readers"]) <= {"rapidocr", "tesseract"}

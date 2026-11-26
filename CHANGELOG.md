@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.2.0 (2026-11-26)
+
+The way models come as an optional download, a bench for the finders of areas, and barcodes
+read once and right. Interface 1 and both formats stay: everything here is added.
+
+### Added
+
+- **`ocrdoc models list`, `ocrdoc models fetch <name> --to <folder>`, `--models <folder>`** for
+  `run` and `edit`, and `models` in the answer of `about`: doccor's mechanism (0.2.0), the same in
+  every tool of docrepro. `models fetch` is the only command that goes on the network, and only
+  when asked; work never does. Kinds of error `unknown-model`, `model-unreachable`,
+  `model-checksum`.
+- **ocrdoc lists no model yet.** A model is listed only after it did better than the rules it
+  would add to. PaddleOCR's layout model PP-DocLayout_plus-L (Apache-2.0, 130 MB), measured on the
+  invented letters of the bench, found 6 to 9 of 12 pictures with many areas where none was
+  drawn, and none of the 6 stamps, at three times the time per page; the rules found 11 to 12
+  pictures. Invented letters are not what it was trained on, so it stays unlisted until a
+  measurement on real documents says otherwise.
+- **`bench/areas_bench.py`** measures the finders of pictures, barcodes, stamps and handwriting
+  on the invented letters of `bench/area_letters.py`, as made, scanned in colour, scanned in
+  grey, and photographed and prepared by optdoc; with `--models` what a model gains. The rules,
+  found of drawn (found where none was drawn):
+
+  | | as made | colour scan | grey scan | photo |
+  |---|---|---|---|---|
+  | pictures | 12 of 12 | 12 of 12 | 12 of 12 | 11 of 12 (1) |
+  | barcodes, all read right | 17 of 17 | 17 of 17 | 17 of 17 | 17 of 17 |
+  | stamps | 6 of 6 | 5 of 6 (1) | 0 of 6 | 6 of 6 |
+  | handwriting | 11 of 12 | 11 of 12 | 9 of 12 | 10 of 12 (3) |
+
+### Fixed
+
+- **A barcode found twice counts once, and its content is what most readings say.** On scans the
+  same barcode could come twice, once with a wrong content. Now one reading per barcode stays,
+  and where two readings of it differ, the cut-out is read again larger and smoothed and the
+  majority decides; without a majority the area stays and its content is left empty, never
+  guessed.
+
+### Changed
+
+- ocrdoc needs doccor 0.2.
+
 ## 0.1.0 (2026-11-26)
 
 ocrdoc comes out of optdoc 0.6.0 with the history of its modules: the recognition, while optdoc

@@ -1,13 +1,19 @@
 # ocrdoc's command line as an interface
 
-**Interface 1**, since ocrdoc 0.1.0. This is what a program may rely on when it calls ocrdoc,
-whatever language it is written in: a records app, a pseudonymiser, a script, docrepro.
+**Interface 1**, since ocrdoc 0.1.0 (this description: ocrdoc 0.2.0). This is what a program may
+rely on when it calls ocrdoc, whatever language it is written in: a records app, a pseudonymiser,
+a script, docrepro.
 
 Every answer carries `interface`. It goes up when something a caller relies on changes in a way
 that breaks it: a field or a kind of error removed or renamed, a meaning changed. Within one
 interface, new fields, new options and new kinds of error may come; a caller ignores fields it
 does not know and treats an unknown kind of error like any other (its message says what
-happened). Releases are tagged (`v0.1.0`); pin a tag, not a branch.
+happened). Releases are tagged; pin a tag, not a branch.
+
+**Added within interface 1 (ocrdoc 0.2.0):** the way models come as an optional download, the same
+as in every tool of docrepro: the commands `models list` and `models fetch`, the option `--models`,
+`models` in the answer of `about`, and the kinds of error `unknown-model`, `model-unreachable` and
+`model-checksum`. ocrdoc lists no model yet (below).
 
 ocrdoc does one step of docrepro: it **recognises** what is on the pages of a PDF and leaves the
 pages as they are. Making a photo or a scan faithful (upright, unwarped, evenly lit) is optdoc's
@@ -21,6 +27,8 @@ ocrdoc about
 ocrdoc run  <file.pdf> --out <folder> [options]
 ocrdoc edit <file.pdf> --out <folder> [options] [--language de|en]
 ocrdoc bench <folder> [--reader rapidocr|tesseract]
+ocrdoc models list [--models <folder>]
+ocrdoc models fetch <name> --to <folder> [--progress]
 ocrdoc --version
 ```
 
@@ -35,14 +43,14 @@ Every answer has these two fields:
 | field | example | meaning |
 |---|---|---|
 | `interface` | `1` | the version of this description |
-| `made_with` | `"ocrdoc 0.1.0"` | the program and its version, for the record of what made a file |
+| `made_with` | `"ocrdoc 0.2.0"` | the program and its version, for the record of what made a file |
 
 ## `about`: what this installation can do
 
 ```json
-{"interface": 1, "made_with": "ocrdoc 0.1.0", "version": "0.1.0",
+{"interface": 1, "made_with": "ocrdoc 0.2.0", "version": "0.2.0",
  "readers": ["rapidocr", "tesseract"], "filters": true, "tables": true, "barcodes": true,
- "window": true}
+ "window": true, "models": []}
 ```
 
 `readers` lists the OCR engines found, in order of preference (`tesseract` is listed where the
@@ -50,14 +58,15 @@ system has it). `filters` says whether the filters for OCR and the finders of pi
 handwriting are there (OpenCV and NumPy, the extra "ocr"), `tables` whether tables are found with
 their cells (Camelot, the extra "tables"), `barcodes` whether barcodes are found and read
 (zxing-cpp, the extra "barcodes"), `window` whether `edit` can open its window (PySide6, the extra
-"gui"). The engines are not loaded for this, so the answer is quick.
+"gui"), `models` the models ocrdoc can use (none yet; see `models` below). The engines are not
+loaded for this, so the answer is quick.
 
 ## `run`: recognise a PDF
 
 ```
 ocrdoc run <file.pdf> --out <folder> [--config <file.ocrdoc.json | file.pdf>]
     [--reader auto|rapidocr|tesseract|none] [--languages <packs>]
-    [--no-tables] [--no-structure] [--no-cells] [--no-areas] [--progress]
+    [--no-tables] [--no-structure] [--no-cells] [--no-areas] [--models <folder>] [--progress]
 ```
 
 `<file>` is a PDF: one optdoc prepared, a scan, any PDF. A photo or an image goes through optdoc
@@ -82,7 +91,7 @@ a `usage` error. `--no-cells` beside it leaves out the tables found before, but 
 The answer:
 
 ```json
-{"interface": 1, "made_with": "ocrdoc 0.1.0",
+{"interface": 1, "made_with": "ocrdoc 0.2.0",
  "pdf": "<folder>/<stem>.pdf", "reading": "<folder>/<stem>.reading.json",
  "markdown": "<folder>/<stem>.md", "config": "<folder>/<stem>.ocrdoc.json",
  "pages": 2, "ocr_pages": [1, 2], "pages_without_text": [], "filtered": [1, 2],
@@ -132,10 +141,46 @@ from a page that is tilted by more than a third of a degree: optdoc straightens 
 {"page": 2, "of": 2}
 ```
 
-**Network.** ocrdoc never goes on the network; everything it needs travels with it. The command
-line refuses every attempt to resolve a name or open a connection before it does anything else
-(the answer would be the error `network`), and switches off the telemetry of ONNX Runtime, which
-would otherwise queue facts about the computer for sending to Microsoft.
+**Network.** ocrdoc never goes on the network while it works; everything it needs travels with
+it. The command line refuses every attempt to resolve a name or open a connection before it does
+anything else (the answer would be the error `network`), and switches off the telemetry of ONNX
+Runtime, which would otherwise queue facts about the computer for sending to Microsoft. The one
+command that would go out is `models fetch`, on request (below).
+
+## `models`: optional downloads
+
+```
+ocrdoc models list [--models <folder>]
+ocrdoc models fetch <name> --to <folder> [--progress]
+```
+
+The way every tool of docrepro takes models (optdoc's `docs/interface.md` describes the answers in
+full): a tool lists the models it can use with the address each comes from, its SHA-256, size and
+licence; `models fetch` is the only command that goes on the network, for that one file, and keeps
+it only when it is the file listed; `run` and `edit` use what lies in the folder of `--models` and
+do without what does not; what a model found is kept in the configuration document, so making the
+result again needs no model.
+
+**ocrdoc lists no model yet**: `models list` answers `{"models": []}`, `models fetch` answers
+`unknown-model`, and `--models` changes nothing. A model is listed only after it did better than
+the rules it would add to, and the one measured did not. `bench/areas_bench.py` counts on six
+invented letters, as made, scanned in colour, scanned in grey and photographed, how many of the
+areas drawn on them are found and how many are found where none was drawn:
+
+| found of drawn (found where none was) | as made | colour scan | grey scan | photo |
+|---|---|---|---|---|
+| pictures, by the rules | 12 of 12 | 12 of 12 | 12 of 12 | 11 of 12 (1) |
+| barcodes, by the rules (all read right) | 17 of 17 | 17 of 17 | 17 of 17 | 17 of 17 |
+| stamps, by the rules | 6 of 6 | 5 of 6 (1) | 0 of 6 | 6 of 6 |
+| handwriting, by the rules | 11 of 12 | 11 of 12 | 9 of 12 | 10 of 12 (3) |
+
+PaddleOCR's layout model PP-DocLayout_plus-L (Apache-2.0, 130 MB) on the same pages found 6 to 9
+of the 12 pictures, with many areas where none was drawn (barcodes and signatures taken for
+pictures, the logo for a page header), and none of the 6 stamps in any variant, at 0.6 to 0.7
+seconds a page against 0.2. Invented letters are not what the model was trained on, so this says
+it is no gain here, not that it is a poor model; it is not listed until a measurement on real
+documents says otherwise. The rules' weak spot is plain in the table: a stamp on a page scanned
+in grey.
 
 ## `edit`: the window
 
@@ -177,7 +222,7 @@ caller waits until it is closed. It keeps no settings of its own and writes noth
 ## The configuration document: `ocrdoc-config`, version 1
 
 ```json
-{"format": "ocrdoc-config", "version": 1, "made_with": "ocrdoc 0.1.0",
+{"format": "ocrdoc-config", "version": 1, "made_with": "ocrdoc 0.2.0",
  "input": {"sha256": "…", "bytes": 245678, "suffix": ".pdf",
            "pages": [{"width": 595.276, "height": 841.89, "frame": "…"}]},
  "options": {"reader": "auto", "languages": null, "tables": true, "structure": true,
@@ -229,7 +274,7 @@ document names (`config-mismatch` otherwise).
 ## Failures
 
 ```json
-{"interface": 1, "made_with": "ocrdoc 0.1.0", "error": "not-pdf", "details": {},
+{"interface": 1, "made_with": "ocrdoc 0.2.0", "error": "not-pdf", "details": {},
  "message": {"en": "ocrdoc reads PDFs; optdoc makes one of a photo or an image first.",
              "de": "ocrdoc liest PDFs; aus einem Foto oder Bild macht optdoc zuerst eines."}}
 ```
@@ -254,6 +299,9 @@ what the message is made from, never a path or content.
 | `cancelled` | the person cancelled the window; nothing was written | |
 | `no-gui` | `edit`, and PySide6 is not installed | |
 | `network` | something tried to reach the network; it was stopped | |
+| `unknown-model` | `models fetch` names a model ocrdoc does not list | `name` |
+| `model-unreachable` | the model's address did not answer, or the download broke off | `name` |
+| `model-checksum` | what came is not the file listed (size or SHA-256); nothing was kept | `name` |
 | `usage` | the command line is not valid (the usage line goes to standard error) | |
 | `internal` | a fault of ocrdoc | `error`: the name of the exception class |
 
@@ -263,7 +311,7 @@ The same kinds and wording are there for programs that use ocrdoc as a Python li
 ## The reading: `ocrdoc-reading`, version 1
 
 ```json
-{"format": "ocrdoc-reading", "version": 1, "made_with": "ocrdoc 0.1.0",
+{"format": "ocrdoc-reading", "version": 1, "made_with": "ocrdoc 0.2.0",
  "reader": "rapidocr", "input": {"sha256": "…"},
  "pages": [{"page": 1, "width": 595.28, "height": 841.89, "source": "ocr",
             "text": "Kalium\t5,8\tmmol/l\t3,5 - 5,1\tH\n…", "markdown": "…",

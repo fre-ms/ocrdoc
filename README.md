@@ -22,7 +22,7 @@ What they share (configuration documents, the command line's manners, no network
 blocks) is [doccor](https://github.com/fre-ms/doccor)'s. ocrdoc works on any PDF, optdoc's or another
 program's, and knows nothing of the applications that use it.
 
-**Status: pre-alpha (0.1.0).** The code comes out of optdoc 0.6.0, with its history, where it read the
+**Status: pre-alpha (0.2.0).** The code comes out of optdoc 0.6.0, with its history, where it read the
 pages optdoc had prepared. `CHANGELOG.md` lists what changed in the move.
 
 ## Every step can be reproduced and resumed
@@ -83,8 +83,8 @@ The `ocr` extra brings RapidOCR, ONNX Runtime, OpenCV and NumPy (for the filters
 `tables` extra brings [Camelot](https://github.com/camelot-dev/camelot), which finds tables with their
 cells; the `barcodes` extra zxing-cpp; the `gui` extra PySide6 (Qt, LGPL 3.0) for the window. Tesseract
 is optional and installed separately (`brew install tesseract tesseract-lang`,
-`apt install tesseract-ocr tesseract-ocr-deu`). One standalone program with every tool of docrepro inside
-is to come with docrepro; until then optdoc 0.6.0 is the standalone program that does both steps.
+`apt install tesseract-ocr tesseract-ocr-deu`). The standalone program with every tool of docrepro inside
+is [docrepro](https://github.com/fre-ms/docrepro)'s.
 
 ## Command line
 
@@ -104,9 +104,15 @@ alike. Every command answers with one JSON object on standard output, so that pr
 can use ocrdoc as a helper; a failure too, with a fixed kind and its message in English and German, and
 exit status 2. No answer quotes a document or its path. Options: `--reader auto|rapidocr|tesseract|none`,
 `--languages`, `--config`, `--no-tables`, `--no-structure`, `--no-cells` (no tables with their cells),
-`--no-areas` (no barcodes, pictures, stamps or handwriting), `--progress` (a line of JSON per page on
-standard error). [docs/interface.md](docs/interface.md) describes the answers, the kinds of error, the
-configuration document and the reading.
+`--no-areas` (no barcodes, pictures, stamps or handwriting), `--models <folder>`, `--progress` (a line of
+JSON per page on standard error). [docs/interface.md](docs/interface.md) describes the answers, the kinds
+of error, the configuration document and the reading.
+
+**Models** come the way they do in every tool of docrepro: `ocrdoc models list` shows the models ocrdoc
+can use, `ocrdoc models fetch <name> --to <folder>` fetches one (the only command that goes on the
+network, and only when asked), `run` and `edit` use what lies in the folder of `--models`. ocrdoc lists
+none yet: a model is listed only after it did better than the rules it would add to, and the layout model
+measured so far (PP-DocLayout_plus-L) did not, on the invented letters of the bench below.
 
 Settings without a configuration file: `OCRDOC_OCR` (the engine `auto` stands for), `OCRDOC_TESSERACT`
 (the program's path), `OCRDOC_TESSERACT_LANGUAGES`. An application that embeds ocrdoc hands over its own
@@ -131,7 +137,14 @@ ocrdoc bench reports/
 Where a document also has `<name>.cells.json` (the cells of each row as printed; `bench/lab_reports.py`
 writes it), the bench scores its tables as well: rows cut into the right cells, rows read exactly.
 `bench/area_letters.py` makes invented letters with a logo, a picture, a stamp, handwriting and barcodes,
-and the boxes where they lie, to measure the finders.
+and the boxes where they lie, and `bench/areas_bench.py` measures the finders on them, as made, scanned in
+colour, scanned in grey and photographed (the last with optdoc installed beside ocrdoc): how many of the
+areas drawn are found, how many are found where none was drawn, and how many barcodes are read right.
+With `--models <folder>` it measures what a model gains over the rules.
+
+```
+uv run python bench/areas_bench.py letters/
+```
 
 ## In Python
 
@@ -172,9 +185,9 @@ words one in German, `"en"` in English.
 
 ## Planned
 
-- The reading order of text areas, and layout models (PP-DocLayout, a handwriting detector) as an
-  optional download (`ocrdoc models fetch`, the only command that goes on the network, on a person's
-  request), measured against the rules before they are offered.
+- The reading order of text areas.
+- Stamps on pages scanned in grey, which the rules miss (0 of 6 on the bench); a layout model measured on
+  real documents, where the invented letters cannot judge it.
 - Apple Vision as a reader on macOS, including its document recognition with table cells.
 - Two independent readings of every number, so that a value is only trusted where both agree.
 
