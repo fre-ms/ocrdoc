@@ -21,6 +21,7 @@ less of one.
 from __future__ import annotations
 
 import importlib.util
+from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
@@ -67,7 +68,48 @@ def find_barcodes(image: Any, scale: float) -> list[Region]:
             y0, y1 = min(y0, top), max(y1, bottom)  # grown only, never cut
         box = (x0 / scale, y0 / scale, x1 / scale, max(y1, y0 + 2) / scale)
         found.append(Region("barcode", box, "auto", content=code.text, format=name))
-    return found
+    return _one_reading_each(found, grey, scale)
+
+
+def _one_reading_each(found: list[Region], grey: Any, scale: float) -> list[Region]:
+    """One region for each barcode on the page.  On a grainy scan zxing-cpp may read the
+    same linear code twice, once right and once with other digits that happen to carry a
+    valid check digit (measured: an EAN-13 on an invented letter scanned in colour).  Where
+    readings of one place disagree, the place is read again enlarged and smoothed, and what
+    most readings say counts; without a majority the region stays, without a content: a
+    wrong code is worse than none."""
+    kept: list[Region] = []
+    for region in found:
+        rival = next((k for k in kept if k.format == region.format
+                      and _overlap(k.box, region.box) > 0.5), None)
+        if rival is None:
+            kept.append(region)
+        elif rival.content != region.content:
+            rival.content = _majority(grey, scale, rival, [rival.content, region.content])
+    return kept
+
+
+def _majority(grey: Any, scale: float, region: Region, said: list[str | None]) -> str | None:
+    """What most readings of a barcode's place say, among those zxing-cpp gave (``said``)
+    and those of the place cut out, enlarged twice and three times, plain and smoothed;
+    None where no content has more readings than every other."""
+    import cv2
+    import zxingcpp
+
+    x0, y0, x1, y1 = (int(v * scale) for v in region.box)
+    margin = max(8, (x1 - x0) // 10)
+    cut = grey[max(0, y0 - margin):y1 + margin, max(0, x0 - margin):x1 + margin]
+    votes = Counter(text for text in said if text)
+    for factor in (2, 3):
+        large = cv2.resize(cut, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
+        for image in (large, cv2.GaussianBlur(large, (0, 0), 1.2)):
+            for code in zxingcpp.read_barcodes(image):
+                if code.text in votes:
+                    votes[code.text] += 1
+    ranked = votes.most_common(2)
+    if not ranked or (len(ranked) > 1 and ranked[0][1] == ranked[1][1]):
+        return None
+    return ranked[0][0]
 
 
 TWO_DIMENSIONAL = {"QRCode", "MicroQRCode", "RMQRCode", "DataMatrix", "Aztec", "AztecCode",

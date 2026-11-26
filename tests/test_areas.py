@@ -90,6 +90,39 @@ def test_areas_of_a_letter_scanned_in_colour(tmp_path: Path) -> None:
     assert "Sehr geehrte" in page["text"] and "Ramipril" in page["text"]
 
 
+def test_a_barcode_read_two_ways_counts_once(tmp_path: Path) -> None:
+    """On a grainy scan zxing-cpp reads one EAN-13 twice, once with other digits that
+    carry a valid check digit: every barcode comes out once, with what is printed."""
+    pdf, truth = area_letter(tmp_path, 1)
+    source = colour_scan(pdf, tmp_path / "scan.pdf", rotation=1.0, seed=0)
+    project = Project.open(source, Options(reader="none", cells=False))
+    try:
+        codes = [r for r in project.regions(0) if r.kind == "barcode"]
+    finally:
+        project.close()
+    drawn = [a for a in truth if a["kind"] == "barcode"]
+    assert sorted(r.content or "" for r in codes) == sorted(a["content"] for a in drawn)
+
+
+def test_readings_without_a_majority_give_no_content() -> None:
+    """Where the readings of one place disagree and none has more voices, the region
+    stays and says nothing: a wrong code is worse than none."""
+    import numpy as np
+
+    blank = np.full((200, 400), 255, np.uint8)  # nothing to read again
+    region = areas.Region("barcode", (10.0, 10.0, 150.0, 60.0), "auto", content="111",
+                          format="EAN13")
+    rival = areas.Region("barcode", (10.0, 11.0, 150.0, 60.0), "auto", content="222",
+                         format="EAN13")
+    kept = areas._one_reading_each([region, rival], blank, 1.0)
+    assert len(kept) == 1 and kept[0].content is None and kept[0].format == "EAN13"
+    same = areas.Region("barcode", (10.0, 10.0, 150.0, 60.0), "auto", content="111",
+                        format="EAN13")
+    twice = areas.Region("barcode", (10.0, 10.0, 150.0, 60.0), "auto", content="111",
+                         format="EAN13")
+    assert [r.content for r in areas._one_reading_each([same, twice], blank, 1.0)] == ["111"]
+
+
 @needs_backend
 def test_nothing_but_the_table_on_a_laboratory_report(tmp_path: Path) -> None:
     """A scanned laboratory report, upright as optdoc hands it on: its table, and no
