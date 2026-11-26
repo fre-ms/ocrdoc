@@ -1,12 +1,12 @@
 [project]
-name = "optdoc"
-version = "0.7.0"
-description = "Makes photographed and scanned documents legible: straighten, clean up, OCR with word boxes and tables, searchable PDF."
+name = "ocrdoc"
+version = "0.1.0"
+description = "Recognises what is on the pages of a PDF: areas, OCR with word boxes, tables, barcodes; the pages stay as they are, the result is reproducible."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "AGPL-3.0-or-later"
 authors = [{ name = "fre.ms", email = "fre.ms@fre.ms" }]
-keywords = ["ocr", "scan", "document", "dewarp", "deskew", "pdf", "searchable-pdf", "tesseract", "rapidocr"]
+keywords = ["ocr", "document", "layout", "tables", "barcodes", "pdf", "searchable-pdf", "tesseract", "rapidocr"]
 classifiers = [
   "Development Status :: 2 - Pre-Alpha",
   "Environment :: Console",
@@ -18,17 +18,17 @@ classifiers = [
   "Topic :: Text Processing",
 ]
 dependencies = [
-  # the core the tools of reprodoc share: configuration documents, errors, the command
+  # the core the tools of docrepro share: configuration documents, errors, the command
   # line's manners, no network, the window's building blocks
   "doccor>=0.1",
-  # <2: PyMuPDF 2.0 (MuPDF 1.28.5) shifts glyphs after a redaction; optdoc's pages are
+  # <2: PyMuPDF 2.0 (MuPDF 1.28.5) shifts glyphs after a redaction; ocrdoc's pages are
   # redacted by PseudonyMed, so both pin the same range
   "pymupdf>=1.25,<2",
 ]
 
 [project.optional-dependencies]
-# RapidOCR brings OpenCV and NumPy, which the clean-up steps need as well
-ocr = ["rapidocr>=3", "onnxruntime>=1.18", "pillow>=10", "pillow-heif>=0.18"]
+# RapidOCR brings OpenCV and NumPy, which the filters and the finders need as well
+ocr = ["rapidocr>=3", "onnxruntime>=1.18", "pillow>=10"]
 tables = [
     "camelot-py>=2.2",
 ]
@@ -41,19 +41,16 @@ barcodes = [
 ]
 
 [tool.uv.sources]
-# a released tag: optdoc moves to a new doccor on purpose
+# a released tag: ocrdoc moves to a new doccor on purpose
 doccor = { git = "https://github.com/fre-ms/doccor", tag = "v0.1.0" }
 
 [project.scripts]
-optdoc = "optdoc.cli:main"
+ocrdoc = "ocrdoc.cli:main"
 
 [project.urls]
-Source = "https://github.com/fre-ms/optdoc"
+Source = "https://github.com/fre-ms/ocrdoc"
 
 [dependency-groups]
-build = [
-    "pyinstaller>=6.11",
-]
 dev = [
   "pytest>=8",
   "pytest-timeout>=2.3",
@@ -65,7 +62,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["optdoc"]
+packages = ["ocrdoc"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

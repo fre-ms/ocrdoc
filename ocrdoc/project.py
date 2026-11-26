@@ -1,31 +1,32 @@
-"""A piece of work on one document, and its configuration.
+"""A piece of recognition work on one PDF, and its configuration document.
 
-A project holds everything that decides what optdoc makes of a file: the settings
-(engine, paper, the clean-up switches), the clean-up plan of every page, what OCR read
-on every page (its words with their boxes and confidences), the regions of every page
-(text, tables with their grids, pictures …: :mod:`optdoc.layout`), and the text a
-person corrected.  Its configuration (``<name>.optdoc.json``, format ``optdoc-config``) is
-that, and nothing else: no paths, no times.  It serves three ends:
+ocrdoc reads a PDF whose pages are to stay as they are: a page optdoc prepared, a scan,
+any PDF.  It divides each page into areas, reads its text (OCR where the page has no text
+of its own), finds its tables, barcodes, stamps and handwriting, and lays the text
+invisibly over the pages without touching their pictures.
 
-- **Interrupting and resuming.**  The window (``optdoc edit``) saves the configuration
-  and opens it again where the person stopped.
-- **Reproducing.**  The file and its configuration always give the same result,
-  byte for byte: the clean-up is computed from the plan, and the text from the words
-  stored, so that OCR, which is not always deterministic, does not run again; so are
-  the regions found automatically.  A page whose words or regions are not stored yet
-  is read, and its regions found, when the result is made.
-- **Improving on a result.**  The configuration also travels inside the PDF optdoc
-  writes (an embedded file ``optdoc.json``); ``--config`` takes that PDF as well.
+Its configuration document (``<stem>.ocrdoc.json``, format ``ocrdoc-config``) holds
+everything that decides the result and nothing else (no paths, no times): the settings,
+per page the filters its rendering goes through before OCR (:mod:`ocrdoc.filters`), the
+words OCR read, its areas and who set them, and the text a person corrected.  It serves
+three ends:
 
-The configuration names the file it belongs to by its SHA-256; another file is refused.
-The command line, the window and :func:`optdoc.reading.read` all make their results
-through :meth:`Project.build`, so that there is one way from a configuration to a result.
+- **Reproducing.**  The input and the document always give the same result, byte for
+  byte: OCR and the finders do not run again where their results are stored.
+- **Resuming.**  The window (``ocrdoc edit``) saves the document and opens it again where
+  the person stopped; the PDF ocrdoc writes carries it too (``ocrdoc.json``).
+- **Going on after an earlier step changed.**  The document names its input by its
+  SHA-256 and every page's frame (where optdoc prepared the input, a fingerprint of where
+  things lie on the page).  When the input changed but a page's frame did not (more
+  contrast in optdoc), what a person decided on that page stays (areas, a table's grid,
+  corrected text) and what a machine found is found again; where the frame changed, the
+  page's decisions go and :attr:`Project.dropped` says so.  An input without frames must
+  be the very same file ("config-mismatch" otherwise).
 """
 
 from __future__ import annotations
 
 import contextlib
-import functools
 import gc
 import json
 import shutil
@@ -39,61 +40,53 @@ import pymupdf
 from doccor import documents
 from doccor.errors import DocError
 
-from optdoc import __version__, areas, cleanup, layout, tables, textlayer
-from optdoc import ocr as ocrlib
-from optdoc.alignment import align_correction
-from optdoc.errors import OptdocError
-from optdoc.loading import open_document
-from optdoc.pagetext import PageText, read_text_layer
-from optdoc.reading import (
-    MAX_PIXELS_UPSCALED,
-    PageReading,
-    Progress,
-    Reading,
-    suggestion_for,
-)
-from optdoc.structure import analyse_page_structure
-from optdoc.tables import Table
+from ocrdoc import __version__, areas, layout, tables, textlayer
+from ocrdoc import filters as filtering
+from ocrdoc import ocr as ocrlib
+from ocrdoc.alignment import align_correction
+from ocrdoc.errors import OcrdocError
+from ocrdoc.filters import Filters
+from ocrdoc.pagetext import PageText, read_text_layer
+from ocrdoc.reading import MAX_PIXELS_UPSCALED, PageReading, Progress, Reading
+from ocrdoc.structure import analyse_page_structure
+from ocrdoc.tables import Table
 
-FORMAT = "optdoc-config"
+FORMAT = "ocrdoc-config"
 FORMAT_VERSION = 1
-SUFFIX = ".optdoc.json"
-EMBEDDED = "optdoc.json"  # the name of the configuration inside the PDF
+SUFFIX = ".ocrdoc.json"
+EMBEDDED = "ocrdoc.json"  # the name of the configuration document inside the PDF
+UPSTREAM = "optdoc.json"  # optdoc's, inside a page it prepared: it holds the frames
 
 
 @dataclass
 class Options:
     """The settings that decide the result: OCR engine and its language packs,
-    Tesseract's second pass for table grids, the paper an image is placed on, photo or
-    scan (None: told by each page), the automatic clean-up, the structure of OCR text,
-    the resolution pages are cleaned up and read at, whether tables are found with
-    their cells automatically (``cells``), and whether barcodes, stamps, pictures and
-    handwriting are (``areas``); a person can set every area all the same."""
+    Tesseract's second pass for table grids, the structure of OCR text, the resolution
+    pages are read at, and whether tables (``cells``) and barcodes, stamps, pictures and
+    handwriting (``areas``) are found automatically; a person can set every area all the
+    same."""
 
     reader: str = "auto"
     languages: str | None = None
     tables: bool = True
-    paper: str = "a4"
-    photo: bool | None = None
-    clean_up: bool = True
     structure: bool = True
     dpi: int = ocrlib.OCR_DPI
     cells: bool = True
     areas: bool = True
 
     def as_dict(self) -> dict[str, Any]:
-        """The settings for the configuration."""
+        """The settings for the configuration document."""
         return dict(self.__dict__)
 
     @classmethod
     def from_dict(cls, d: Any) -> Options:
-        """The settings from a configuration; a value of the wrong kind is a "bad-config"."""
+        """The settings from a configuration document; a value of the wrong kind is a
+        "bad-config"."""
         if not isinstance(d, dict):
-            raise OptdocError("bad-config", reason="field")
+            raise OcrdocError("bad-config", reason="field")
         options = cls()
         kinds: dict[str, tuple[type, ...]] = {
             "reader": (str,), "languages": (str, type(None)), "tables": (bool,),
-            "paper": (str,), "photo": (bool, type(None)), "clean_up": (bool,),
             "structure": (bool,), "dpi": (int,), "cells": (bool,), "areas": (bool,)}
         for name, value in d.items():
             if name not in kinds:
@@ -102,47 +95,25 @@ class Options:
             if name == "dpi" and isinstance(value, int):
                 bad = bad or isinstance(value, bool) or not 72 <= value <= 1200
             if bad:
-                raise OptdocError("bad-config", reason="field")
+                raise OcrdocError("bad-config", reason="field")
             setattr(options, name, value)
         return options
 
 
 @dataclass
 class _Page:
-    """The state of one page: its plan once decided (None: no clean-up), what OCR read
-    on the cleaned page (None: not read yet; ``ocr`` False: the page has a text layer
-    and needs none), its regions (None: not found yet) and whether a person set them,
-    and the person's correction of the OCR text."""
+    """The state of one page: its filters once decided, what OCR read (None: not read
+    yet; ``ocr`` False: the page has a text layer and needs none), its regions (None: not
+    found yet) and whether a person set them, and the person's correction."""
 
-    decided: bool = False
-    plan: cleanup.CleanupPlan | None = None
+    filters: Filters | None = None  # decided; None: the suggestion
+    filters_by_person: bool = False
     ocr: bool | None = None
     words: list[ocrlib.OCRWord] | None = None
     correction: str | None = None
     regions: list[layout.Region] | None = None
     regions_by_person: bool = False
-    suggestion: cleanup.CleanupPlan | None = field(default=None, repr=False)
-
-
-def _plan_key(plan: cleanup.CleanupPlan | None) -> str:
-    """A plan as a string that is equal for plans that do the same."""
-    if plan is None or not plan.active:
-        return ""
-    return json.dumps(plan.full_dict(), sort_keys=True)
-
-
-def _geometry_key(plan: cleanup.CleanupPlan | None) -> str:
-    """What of a plan moves things on the page (turning, unwarping, straightening): the
-    regions a person set stay where the rest of a plan changes."""
-    if plan is None:
-        return json.dumps([0, False, False])
-    return json.dumps([plan.rotation, plan.unwarp and plan.corners,
-                       plan.straighten and plan.angle])
-
-
-def _copy(plan: cleanup.CleanupPlan | None) -> cleanup.CleanupPlan | None:
-    """An independent copy of a plan (own lists of corners and masks)."""
-    return None if plan is None else cleanup.CleanupPlan.from_dict(plan.full_dict())
+    suggestion: Filters | None = field(default=None, repr=False)
 
 
 def _rounded(w: ocrlib.OCRWord) -> ocrlib.OCRWord:
@@ -156,47 +127,220 @@ def _word_from(row: Any) -> ocrlib.OCRWord:
     """A stored word ``[text, x0, y0, x1, y1, confidence]``."""
     if not (isinstance(row, list) and len(row) == 6 and isinstance(row[0], str)
             and all(isinstance(v, int | float) and not isinstance(v, bool) for v in row[1:])):
-        raise OptdocError("bad-config", reason="field")
+        raise OcrdocError("bad-config", reason="field")
     return ocrlib.OCRWord(row[0], *(float(v) for v in row[1:]))
 
 
-def digest(path: Path) -> str:
-    """The SHA-256 of a file, as the configuration names it."""
-    return documents.digest(path)
-
-
 def load_config(path: str | Path) -> dict[str, Any]:
-    """A configuration from its file, or from the PDF optdoc wrote, which carries it.
-    Raises "missing", or "bad-config" (reason "json" or "format") for a file that holds
-    none optdoc can read."""
+    """A configuration document from its file, or from the PDF ocrdoc wrote, which
+    carries it.  Raises "missing", or "bad-config" (reason "json" or "format")."""
     try:
-        return documents.load_document(path, FORMAT, FORMAT_VERSION, EMBEDDED, "optdoc")
-    except DocError as e:  # optdoc's own, so that callers catch one kind of error
+        return documents.load_document(path, FORMAT, FORMAT_VERSION, EMBEDDED, "ocrdoc")
+    except DocError as e:  # ocrdoc's own, so that callers catch one kind of error
         reason = e.details.get("reason")
-        raise (OptdocError(e.kind, reason=reason) if reason is not None
-               else OptdocError(e.kind)) from e
+        raise (OcrdocError(e.kind, reason=reason) if reason is not None
+               else OcrdocError(e.kind)) from e
+
+
+def config_bytes(config: dict[str, Any]) -> bytes:
+    """A configuration document as ocrdoc writes it: JSON, the same bytes for the same
+    content."""
+    return documents.document_bytes(config)
+
+
+def open_pdf(path: Path) -> pymupdf.Document:
+    """A PDF to read, every page upright (``/Rotate`` taken into its content, which looks
+    the same).  Raises "missing", "not-pdf" (photos and images go through
+    optdoc first), "encrypted", "unreadable"."""
+    if not path.is_file():
+        raise OcrdocError("missing")
+    if path.suffix.lower() != ".pdf":
+        raise OcrdocError("not-pdf")
+    try:
+        doc = pymupdf.open(path)
+    except Exception as e:  # MuPDF words its failures with the file's name
+        raise OcrdocError("unreadable") from e
+    if doc.needs_pass:
+        doc.close()
+        raise OcrdocError("encrypted")
+    if doc.page_count == 0:
+        doc.close()
+        raise OcrdocError("unreadable")
+    for page in doc.pages():
+        if page.rotation:
+            page.remove_rotation()
+    return doc
+
+
+def _frames(doc: pymupdf.Document) -> list[str | None]:
+    """The frame of every page, from the configuration document of the step that
+    prepared the input (optdoc's, embedded); None where there is none."""
+    frames: list[str | None] = [None] * len(doc)
+    try:
+        if UPSTREAM not in doc.embfile_names():
+            return frames
+        upstream = json.loads(doc.embfile_get(UPSTREAM).decode("utf-8"))
+        for k, page in enumerate(upstream.get("pages", [])[:len(doc)]):
+            frame = page.get("frame") if isinstance(page, dict) else None
+            frames[k] = frame if isinstance(frame, str) else None
+    except Exception:  # an unreadable upstream document: no frames
+        return [None] * len(doc)
+    return frames
 
 
 class Project:
-    """The work on one document; see the module.  Open with :meth:`open`, close with
-    :meth:`close`.  Page numbers count from 0."""
+    """The recognition work on one PDF; see the module.  Open with :meth:`open`, close
+    with :meth:`close`.  Page numbers count from 0."""
 
     def __init__(self, source: Path, doc: pymupdf.Document, sha256: str, size: int,
                  options: Options) -> None:
         self.source = source
-        self.original = doc  # every page upright, as it came
+        self.doc = doc  # every page upright, as it came
         self.sha256 = sha256
         self.size = size
         self.options = options
         self.pages = [_Page() for _ in range(len(doc))]
-        self._work = pymupdf.open("pdf", doc.tobytes())  # the pages as cleaned up
-        self._applied: list[str] = [""] * len(doc)  # the plan each work page shows
-        self._images: dict[int, tuple[str, tuple[bytes, float, float]]] = {}
+        self.frames = _frames(doc)
+        self.dropped: list[int] = []  # pages whose decisions went: their frame changed
+        self.scratch: Path | None = None  # where a page may be written for a moment
         self._layer: dict[int, bool] = {}
+        self._needs: dict[int, bool] = {}
         self._engine: ocrlib.OCRBackend | None = None
         self._engine_made = False
         self._stored_reader: str | None = None
-        self.scratch: Path | None = None  # where a page may be written for a moment
+
+    # -- opening and saving --------------------------------------------------------------------
+    @classmethod
+    def open(cls, source: str | Path, options: Options | None = None,
+             config: dict[str, Any] | None = None) -> Project:
+        """A project on ``source`` (a PDF): fresh with ``options``, or as ``config`` left
+        it (whose settings then count).  Raises "config-mismatch" when the document
+        belongs to another file and no frame says the pages are the same."""
+        source = Path(source)
+        doc = open_pdf(source)
+        sha256 = documents.digest(source)
+        if config is not None:
+            options = Options.from_dict(config.get("options", {}))
+        project = cls(source, doc, sha256, source.stat().st_size, options or Options())
+        if config is not None:
+            try:
+                project._take(config)
+            except Exception:
+                project.close()
+                raise
+        return project
+
+    def _take(self, config: dict[str, Any]) -> None:
+        """The pages of a configuration document: as they were where the input is the
+        same file; where it is another, by the frames (see the module)."""
+        named = config.get("input")
+        if not isinstance(named, dict):
+            raise OcrdocError("bad-config", reason="field")
+        reader = config.get("reader")
+        self._stored_reader = reader if isinstance(reader, str) else None
+        pages = config.get("pages")
+        if not isinstance(pages, list) or len(pages) != len(self.pages):
+            raise OcrdocError("bad-config", reason="page")
+        if named.get("sha256") == self.sha256:
+            for page, entry in zip(self.pages, pages, strict=True):
+                self._take_page(page, entry, everything=True)
+            return
+        stored = named.get("pages")
+        if not isinstance(stored, list) or len(stored) != len(self.pages) \
+                or not any(self.frames):
+            raise OcrdocError("config-mismatch")
+        self._stored_reader = None  # what is read again is read by the engine of now
+        for n, (page, entry, then) in enumerate(zip(self.pages, pages, stored, strict=True)):
+            same = isinstance(then, dict) and self.frames[n] is not None \
+                and then.get("frame") == self.frames[n]
+            if same:
+                self._take_page(page, entry, everything=False)
+            elif _has_decisions(entry):
+                self.dropped.append(n)
+
+    def _take_page(self, page: _Page, entry: Any, everything: bool) -> None:
+        """One page of a configuration document: all of it (``everything``, the same
+        input), or what a person decided (another input, the same frame)."""
+        if not isinstance(entry, dict):
+            raise OcrdocError("bad-config", reason="field")
+        chosen = entry.get("filters")
+        if chosen is not None:
+            if not isinstance(chosen, dict) or chosen.get("by") not in layout.BY:
+                raise OcrdocError("bad-config", reason="field")
+            by_person = chosen["by"] == "person"
+            if everything or by_person:
+                page.filters = Filters.from_dict(chosen)
+                page.filters_by_person = by_person
+        correction = entry.get("correction")
+        if correction is not None and not isinstance(correction, str):
+            raise OcrdocError("bad-config", reason="field")
+        page.correction = correction
+        found = entry.get("layout")
+        if found is not None:
+            if not isinstance(found, dict) or found.get("by") not in layout.BY:
+                raise OcrdocError("bad-config", reason="field")
+            by_person = found["by"] == "person"
+            if everything or by_person:
+                page.regions = layout.regions_from_dicts(found.get("regions"))
+                page.regions_by_person = by_person
+        if not everything:
+            return
+        ocr = entry.get("ocr")
+        if ocr is not None and not isinstance(ocr, bool):
+            raise OcrdocError("bad-config", reason="field")
+        page.ocr = ocr
+        words = entry.get("words")
+        page.words = None if words is None or not isinstance(words, list) else [
+            _word_from(row) for row in words]
+        if ocr and page.words is None:
+            page.ocr = None  # to be read again
+
+    def config(self) -> dict[str, Any]:
+        """The configuration document: input, settings, and per page its filters (the
+        suggestion where none was decided), what OCR read, its areas (None while not
+        found) and the correction."""
+        pages = []
+        for n, page in enumerate(self.pages):
+            chosen = self.filters(n)
+            pages.append({
+                "page": n + 1,
+                "filters": None if chosen is None else {
+                    **chosen.as_dict(), "by": "person" if page.filters_by_person else "auto"},
+                "ocr": page.ocr,
+                "words": None if page.words is None else [
+                    [w.text, w.x0, w.y0, w.x1, w.y1, w.confidence] for w in page.words],
+                "layout": None if page.regions is None else {
+                    "by": "person" if page.regions_by_person else "auto",
+                    "regions": [r.as_dict() for r in page.regions]},
+                "correction": page.correction,
+            })
+        sizes = []
+        for n in range(len(self.doc)):
+            rect = self.doc[n].rect
+            sizes.append({"width": round(rect.width, 3), "height": round(rect.height, 3),
+                          "frame": self.frames[n]})
+        return {
+            "format": FORMAT, "version": FORMAT_VERSION, "made_with": f"ocrdoc {__version__}",
+            "input": {"sha256": self.sha256, "bytes": self.size,
+                      "suffix": self.source.suffix.lower(), "pages": sizes},
+            "options": self.options.as_dict(),
+            "reader": self.reader_name(),
+            "pages": pages,
+        }
+
+    def save(self, path: str | Path) -> Path:
+        """Write the configuration document to ``path``; raises "unwritable"."""
+        path = Path(path)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(config_bytes(self.config()))
+        except OSError as e:
+            raise OcrdocError("unwritable") from e
+        return path
+
+    def close(self) -> None:
+        """Release the document."""
+        self.doc.close()
 
     @contextlib.contextmanager
     def _working_folder(self) -> Iterator[Path]:
@@ -204,17 +348,17 @@ class Project:
         any other input to the temporary folder): inside the results folder (``scratch``)
         where the project has one, so that nothing of a document lands anywhere else; it
         is removed at once, and the results folder too when it was made for it and stays
-        empty.  Without one (optdoc used as a library), a private temporary folder."""
+        empty.  Without one (ocrdoc used as a library), a private temporary folder."""
         if self.scratch is None:
-            with tempfile.TemporaryDirectory(prefix="optdoc-") as folder:
+            with tempfile.TemporaryDirectory(prefix="ocrdoc-") as folder:
                 yield Path(folder)
             return
         made = not self.scratch.exists()
-        work = self.scratch / ".optdoc-work"
+        work = self.scratch / ".ocrdoc-work"
         try:
             work.mkdir(parents=True, exist_ok=True)
         except OSError as e:
-            raise OptdocError("unwritable") from e
+            raise OcrdocError("unwritable") from e
         try:
             yield work
         finally:
@@ -224,202 +368,70 @@ class Project:
                 with contextlib.suppress(OSError):
                     self.scratch.rmdir()  # only when nothing else is in it
 
-    # -- opening and saving --------------------------------------------------------------------
-    @classmethod
-    def open(cls, source: str | Path, options: Options | None = None,
-             config: dict[str, Any] | None = None) -> Project:
-        """A project on ``source``: fresh with ``options``, or as ``config`` left it
-        (whose settings then count).  Raises "config-mismatch" when the configuration
-        belongs to another file, and what :func:`optdoc.loading.open_document` raises."""
-        source = Path(source)
-        if not source.is_file():
-            raise OptdocError("missing")
-        sha256 = digest(source)
-        if config is not None:
-            named = config.get("source")
-            if not isinstance(named, dict) or named.get("sha256") != sha256:
-                raise OptdocError("config-mismatch")
-            options = Options.from_dict(config.get("options", {}))
-        options = options or Options()
-        doc = open_document(source, options.paper)
-        project = cls(source, doc, sha256, source.stat().st_size, options)
-        if config is not None:
-            reader = config.get("reader")
-            project._stored_reader = reader if isinstance(reader, str) else None
-            try:
-                project._take_pages(config.get("pages"))
-            except Exception:
-                project.close()
-                raise
-        return project
-
-    def _take_pages(self, pages: Any) -> None:
-        """The pages of a configuration: one entry per page of the document."""
-        if not isinstance(pages, list) or len(pages) != len(self.pages):
-            raise OptdocError("bad-config", reason="page")
-        for page, entry in zip(self.pages, pages, strict=True):
-            if not isinstance(entry, dict):
-                raise OptdocError("bad-config", reason="field")
-            plan = entry.get("plan")
-            page.decided = True
-            page.plan = None if plan is None else cleanup.CleanupPlan.from_dict(plan)
-            ocr = entry.get("ocr")
-            if ocr is not None and not isinstance(ocr, bool):
-                raise OptdocError("bad-config", reason="field")
-            page.ocr = ocr
-            words = entry.get("words")
-            page.words = None if words is None or not isinstance(words, list) else [
-                _word_from(row) for row in words]
-            if ocr and page.words is None:
-                page.ocr = None  # to be read again
-            correction = entry.get("correction")
-            if correction is not None and not isinstance(correction, str):
-                raise OptdocError("bad-config", reason="field")
-            page.correction = correction
-            found = entry.get("layout")
-            if found is not None:
-                if not isinstance(found, dict) or found.get("by") not in layout.BY:
-                    raise OptdocError("bad-config", reason="field")
-                page.regions = layout.regions_from_dicts(found.get("regions"))
-                page.regions_by_person = found["by"] == "person"
-
-    def config(self) -> dict[str, Any]:
-        """The configuration: settings, and per page the plan (resolved: the suggestion
-        where none was decided; kept also where it does nothing, for the corners it
-        found), what OCR read, the regions (found or set; None while not found), and the
-        correction."""
-        pages = []
-        for n, page in enumerate(self.pages):
-            plan = self.plan(n)
-            pages.append({
-                "page": n + 1,
-                "plan": plan.full_dict() if plan is not None else None,
-                "ocr": page.ocr,
-                "words": None if page.words is None else [
-                    [w.text, w.x0, w.y0, w.x1, w.y1, w.confidence] for w in page.words],
-                "layout": None if page.regions is None else {
-                    "by": "person" if page.regions_by_person else "auto",
-                    "regions": [r.as_dict() for r in page.regions]},
-                "correction": page.correction,
-            })
-        return {
-            "format": FORMAT, "version": FORMAT_VERSION, "made_with": f"optdoc {__version__}",
-            "source": {"sha256": self.sha256, "bytes": self.size,
-                       "suffix": self.source.suffix.lower()},
-            "options": self.options.as_dict(),
-            "reader": self.reader_name(),
-            "pages": pages,
-        }
-
-    def save(self, path: str | Path) -> Path:
-        """Write the configuration to ``path``; raises "unwritable"."""
-        path = Path(path)
-        try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(config_bytes(self.config()))
-        except OSError as e:
-            raise OptdocError("unwritable") from e
-        return path
-
-    def close(self) -> None:
-        """Release both documents."""
-        self._work.close()
-        self.original.close()
-
-    # -- the clean-up --------------------------------------------------------------------------
+    # -- the pages -----------------------------------------------------------------------------
     def has_text_layer(self, n: int) -> bool:
-        """True when the page as it came carries text of its own (it is not cleaned up)."""
+        """True when the page carries text of its own (it is not read by OCR)."""
         if n not in self._layer:
-            self._layer[n] = read_text_layer(self.original[n], n).has_text_layer
+            self._layer[n] = read_text_layer(self.doc[n], n).has_text_layer
         return self._layer[n]
 
-    def cleanable(self, n: int) -> bool:
-        """True for a page without a text layer (a scan, a photo), when OpenCV is there."""
-        return cleanup.available() and not self.has_text_layer(n)
-
-    def suggestion(self, n: int) -> cleanup.CleanupPlan:
-        """optdoc's suggestion for a page without text layer (computed once); an empty
-        plan for any other page."""
-        page = self.pages[n]
-        if page.suggestion is None:
-            page.suggestion = (suggestion_for(self.original[n], self.options.photo)
-                               if self.cleanable(n) else cleanup.CleanupPlan())
-        return _copy(page.suggestion) or cleanup.CleanupPlan()
-
-    def plan(self, n: int) -> cleanup.CleanupPlan | None:
-        """The clean-up plan of a page, a copy: as decided, else the suggestion (unless
-        the automatic clean-up is off).  It may do nothing (every step off), and keeps
-        what it found all the same (the corners of a sheet, the tilt)."""
-        page = self.pages[n]
-        if page.decided:
-            return _copy(page.plan)
-        if not self.options.clean_up or not self.cleanable(n):
-            return None
-        return self.suggestion(n)
-
-    def active_plan(self, n: int) -> cleanup.CleanupPlan | None:
-        """The plan of a page where it changes the page, else None."""
-        plan = self.plan(n)
-        return plan if plan is not None and plan.active else None
-
-    def set_plan(self, n: int, plan: cleanup.CleanupPlan | None) -> None:
-        """Decide the clean-up plan of a page.  When it changes what the page looks like,
-        what OCR read is dropped (the page is read again); a correction stays and is laid
-        on the new words."""
-        page = self.pages[n]
-        changed = _plan_key(plan) != _plan_key(self.plan(n))
-        moved = _geometry_key(plan) != _geometry_key(self.plan(n))
-        page.decided = True
-        page.plan = _copy(plan)
-        if changed:
-            page.words, page.ocr = None, None
-            # found regions are found again on the new words; a person's stay where
-            # nothing moved on the page
-            if not page.regions_by_person or moved:
-                page.regions, page.regions_by_person = None, False
-
-    def _image(self, n: int) -> tuple[bytes, float, float] | None:
-        """The cleaned-up image of a page and the size of its page (computed once per
-        plan); None for a page that is not cleaned up."""
-        plan = self.active_plan(n)
-        if plan is None:
-            return None
-        key = _plan_key(plan)
-        if n not in self._images or self._images[n][0] != key:
-            self._images[n] = (key, cleanup.cleaned_image(self.original[n], plan,
-                                                          self.options.dpi))
-        return self._images[n][1]
-
-    def _cleaned(self, n: int) -> pymupdf.Page:
-        """The page as cleaned up by its plan, made from the original each time the plan
-        changed."""
-        key = _plan_key(self.plan(n))
-        if self._applied[n] != key:
-            self._work.delete_page(n)
-            self._work.insert_pdf(self.original, from_page=n, to_page=n, start_at=n)
-            image = self._image(n)
-            if image is not None:
-                cleanup.put_page_image(self._work, n, *image)
-            self._applied[n] = key
-        return self._work[n]
+    def needs_ocr(self, n: int) -> bool:
+        """True when OCR reads the page: it has no text layer, or pictures cover a good
+        part of it (a scanned letter in a PDF with a text layer)."""
+        if n not in self._needs:
+            self._needs[n] = ocrlib.needs_ocr(self.doc[n], read_text_layer(self.doc[n], n))
+        return self._needs[n]
 
     def page_png(self, n: int, dpi: int = 100) -> bytes:
-        """The page as OCR sees it (cleaned up, not upscaled), as PNG."""
-        return self._cleaned(n).get_pixmap(dpi=dpi, alpha=False).tobytes("png")
+        """The page as it is, as PNG."""
+        return self.doc[n].get_pixmap(dpi=dpi, alpha=False).tobytes("png")
 
-    def original_png(self, n: int, dpi: int = 100) -> bytes:
-        """The page as it came, as PNG."""
-        return self.original[n].get_pixmap(dpi=dpi, alpha=False).tobytes("png")
+    def suggestion(self, n: int) -> Filters:
+        """ocrdoc's suggestion for the filters of a page (computed once)."""
+        page = self.pages[n]
+        if page.suggestion is None:
+            page.suggestion = filtering.suggest(self.doc[n])
+        return Filters(**page.suggestion.as_dict())
 
-    def preview(self, n: int, plan: cleanup.CleanupPlan, dpi: int = 100) -> tuple[bytes, float]:
-        """The page as ``plan`` would clean it up (upscaling shown), as PNG, and its pixels
-        per point (:func:`optdoc.cleanup.preview_png`)."""
-        return cleanup.preview_png(self.original[n], plan, dpi)
+    def filters(self, n: int) -> Filters | None:
+        """The filters of a page OCR reads, a copy: as decided, else the suggestion;
+        None for a page OCR does not read (:meth:`needs_ocr`)."""
+        if not self.needs_ocr(n):
+            return None
+        page = self.pages[n]
+        if page.filters is not None:
+            return Filters(**page.filters.as_dict())
+        return self.suggestion(n)
 
-    def cleaned_width(self, n: int, plan: cleanup.CleanupPlan) -> float:
-        """The width in points of the page ``plan`` makes (a quarter turn swaps sides)."""
-        r = self.original[n].rect
-        return r.width if plan.rotation in (0, 180) else r.height
+    def preview(self, n: int, chosen: Filters, dpi: int = 100) -> bytes:
+        """The page as OCR reads it through ``chosen``, as PNG: rendered at ``dpi`` times
+        the upscaling (at most 3000 pixels on its longest side), then filtered.  Needs
+        OpenCV (:func:`ocrdoc.filters.available`)."""
+        import cv2
+
+        factor = max(1, chosen.upscale)
+        image, _scale = filtering.render(self.doc[n], dpi * factor, max_pixel=3000)
+        run = filtering.pipeline(chosen)
+        if run is not None:
+            image = run(image)
+        done, data = cv2.imencode(".png", image)
+        if not done:
+            raise OcrdocError("internal", error="imencode")
+        return bytes(data.tobytes())
+
+    def set_filters(self, n: int, chosen: Filters, by_person: bool = True) -> None:
+        """Decide the filters of a page: a person's choice, or (``by_person`` False)
+        ocrdoc's suggestion taken back.  When they change, what OCR read is dropped (the
+        page is read again) and so are the areas found; a person's areas and correction
+        stay."""
+        page = self.pages[n]
+        changed = chosen != self.filters(n)
+        page.filters = Filters(**chosen.as_dict())
+        page.filters_by_person = by_person
+        if changed:
+            page.words, page.ocr = None, None
+            if not page.regions_by_person:
+                page.regions = None
 
     # -- reading -------------------------------------------------------------------------------
     def engine(self) -> ocrlib.OCRBackend | None:
@@ -442,27 +454,29 @@ class Project:
             else None
 
     def needs_reading(self, n: int) -> bool:
-        """True while the page has not been read since its clean-up last changed."""
+        """True while the page has not been read since its filters last changed."""
         return self.pages[n].ocr is None
 
     def read(self, n: int) -> None:
-        """Read a page: its text layer where that suffices, else OCR on the cleaned page
-        (the words are kept).  Nothing happens to a page read already."""
+        """Read a page: its text layer where that suffices, else OCR on the page's
+        rendering through its filters (the words are kept).  Nothing happens to a page
+        read already, nor to one OCR would read where there is no engine (it stays
+        unread, for an engine installed later)."""
         page = self.pages[n]
         if page.ocr is not None:
             return
-        cleaned = self._cleaned(n)
-        engine = self.engine()
-        if engine is None or not ocrlib.needs_ocr(cleaned, read_text_layer(cleaned, n)):
+        if not self.needs_ocr(n):
             page.ocr, page.words = False, None
             return
-        plan = self.active_plan(n)
-        factor = max(1, plan.upscale) if plan is not None else 1
-        finish = (functools.partial(cleanup.letter_finish, factor=factor)
-                  if plan is not None and plan.letter_mode else None)
+        engine = self.engine()
+        if engine is None:
+            return
+        chosen = self.filters(n) or Filters()
+        factor = max(1, chosen.upscale)
         words = ocrlib.recognise_words(
-            cleaned, engine, dpi=self.options.dpi * factor,
-            max_pixel=min(ocrlib.MAX_PIXELS * factor, MAX_PIXELS_UPSCALED), filter_=finish)
+            self.doc[n], engine, dpi=self.options.dpi * factor,
+            max_pixel=min(ocrlib.MAX_PIXELS * factor, MAX_PIXELS_UPSCALED),
+            filter_=filtering.pipeline(chosen) if filtering.available() else None)
         page.words = [_rounded(w) for w in words]
         page.ocr = True
 
@@ -484,8 +498,8 @@ class Project:
         if not every_word and page.regions:
             words = [w for w in words
                      if layout.is_read(page.regions, (w.x0, w.y0, w.x1, w.y1))]
-        cleaned = self._cleaned(n)
-        return ocrlib.page_text_from_words(words, n, cleaned.rect.width, cleaned.rect.height)
+        rect = self.doc[n].rect
+        return ocrlib.page_text_from_words(words, n, rect.width, rect.height)
 
     def text(self, n: int) -> str:
         """The text of a page as it will be: the correction, else what OCR read, else the
@@ -495,7 +509,7 @@ class Project:
         if page.correction is not None:
             return page.correction
         ocr = self.ocr_text(n)
-        return ocr.text if ocr is not None else read_text_layer(self._cleaned(n), n).text
+        return ocr.text if ocr is not None else read_text_layer(self.doc[n], n).text
 
     def set_correction(self, n: int, text: str) -> None:
         """Keep a person's correction of the OCR text of a page; the text as read (spacing
@@ -503,7 +517,7 @@ class Project:
         self.read(n)
         ocr = self.ocr_text(n)
         if ocr is None:
-            raise OptdocError("not-ocr", page=n + 1)
+            raise OcrdocError("not-ocr", page=n + 1)
         self.pages[n].correction = None if text.rstrip() == ocr.text.rstrip() else text
 
     # -- the regions ---------------------------------------------------------------------------
@@ -536,7 +550,7 @@ class Project:
         """A person's regions for a page; raises "bad-config" (reason "field") for a
         region that makes no sense."""
         if not all(r.valid() for r in regions):
-            raise OptdocError("bad-config", reason="field")
+            raise OcrdocError("bad-config", reason="field")
         page = self.pages[n]
         page.regions = [layout.rounded(r) for r in regions]
         page.regions_by_person = True
@@ -549,33 +563,20 @@ class Project:
                 page.regions = None
 
     def find_regions(self, n: int) -> list[layout.Region]:
-        """The regions optdoc finds on a page (read first), in reading order (top to
+        """The regions ocrdoc finds on a page (read first), in reading order (top to
         bottom, then left to right): its tables with their grids (:meth:`find_tables`),
-        and its barcodes, stamps, pictures and handwriting (:mod:`optdoc.areas`), as the
+        and its barcodes, stamps, pictures and handwriting (:mod:`ocrdoc.areas`), as the
         settings ask for them."""
         self.read(n)
         found = self.find_tables(n)
-        if self.options.areas and cleanup.available():
+        if self.options.areas and filtering.available():
             found += self._find_marks(n, [r.box for r in found])
         return sorted(found, key=lambda r: (round(r.box[1]), r.box[0]))
 
     def _find_marks(self, n: int, taken: list[layout.Box]) -> list[layout.Region]:
-        """Barcodes, stamps, pictures and handwriting on the page, outside ``taken``:
-        looked for on the page where it will lie once cleaned up, but in its own colours
-        (the clean-up may take the colour of a stamp away, or turn the page grey)."""
-        plan = self.active_plan(n)
-        if plan is not None:
-            png, width, _height = cleanup.cleaned_image(
-                self.original[n], cleanup.geometry_only(plan), self.options.dpi)
-            import cv2
-            import numpy as np
-
-            decoded = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
-            if decoded is None:
-                raise OptdocError("clean-up-failed")
-            image, scale = decoded, decoded.shape[1] / width
-        else:
-            image, scale = cleanup.render(self.original[n], self.options.dpi)
+        """Barcodes, stamps, pictures and handwriting on the page as it is, in its own
+        colours, outside ``taken``."""
+        image, scale = filtering.render(self.doc[n], self.options.dpi)
         codes = [layout.rounded(r) for r in areas.find_barcodes(image, scale)]
         words = self._area_words(n)
         marks = areas.find_marks(image, scale, words, [*taken, *(c.box for c in codes)])
@@ -588,7 +589,7 @@ class Project:
         if page.ocr and page.words is not None:
             return [areas.Word(w.text, (w.x0, w.y0, w.x1, w.y1), w.confidence)
                     for w in page.words]
-        text = read_text_layer(self._cleaned(n), n)
+        text = read_text_layer(self.doc[n], n)
         return [areas.Word(t, box) for t, box in _words_of(text)] or None
 
     def find_tables(self, n: int) -> list[layout.Region]:
@@ -597,10 +598,9 @@ class Project:
         them failed."""
         if not self.finds_tables():
             return []
-        self._cleaned(n)  # the work page shows the current plan (or the page as it came)
         single = pymupdf.open()
         try:
-            single.insert_pdf(self._work, from_page=n, to_page=n)
+            single.insert_pdf(self.doc, from_page=n, to_page=n)
             text = self.ocr_text(n, every_word=True)
             if text is not None:
                 textlayer.write_page(single, single[0], text, textlayer.add_font(single))
@@ -608,7 +608,7 @@ class Project:
                 page = folder / "page.pdf"
                 single.save(page)
                 found = tables.find_tables(page)
-        except OptdocError:
+        except OcrdocError:
             raise
         except Exception:  # Camelot's own failure on an unusual page: no regions
             return []
@@ -618,26 +618,19 @@ class Project:
 
     # -- the result ----------------------------------------------------------------------------
     def build(self, progress: Progress | None = None) -> Reading:
-        """The result: every page read (where not yet), cleaned up by its plan, its text
-        corrected where a person did; the reading carries the configuration.  The
-        caller closes it."""
+        """The result: every page read (where not yet) and its regions found (where not
+        yet), its text corrected where a person did; the pages themselves as they came.
+        The reading carries the configuration document.  The caller closes it."""
         self.read_all(progress)
-        # made afresh from the original, so that the result does not depend on how often
-        # a plan changed on the way
-        doc = pymupdf.open("pdf", self.original.tobytes())
-        for n in range(len(self.pages)):
-            image = self._image(n)
-            if image is not None:
-                cleanup.put_page_image(doc, n, *image)
         for n in range(len(self.pages)):
             self.regions(n)  # found where not yet, so that the configuration holds them
+        doc = pymupdf.open("pdf", self.doc.tobytes())
         pages = [self._page_reading(doc, n) for n in range(len(self.pages))]
-        plans = {n: p for n in range(len(self.pages)) if (p := self.active_plan(n)) is not None}
         found: dict[int, list[Table]] | None = {s.number: s.tables for s in pages}
         if not self.finds_tables() and not any(s.tables for s in pages):
             found = None  # not looked for
-        return Reading(self.source, doc, plans, pages, self.reader_name(),
-                       tables=found, config=self.config())
+        return Reading(self.source, doc, pages, self.reader_name(), tables=found,
+                       config=self.config(), carried=carried(doc))
 
     def _page_reading(self, doc: pymupdf.Document, n: int) -> PageReading:
         """One page of the result: its text, and the tables of its table regions made
@@ -666,6 +659,25 @@ class Project:
         return [n for n, p in enumerate(self.pages) if p.correction is not None]
 
 
+def carried(doc: pymupdf.Document) -> dict[str, bytes]:
+    """The configuration documents of the steps before that a PDF carries (embedded JSON
+    files other than ocrdoc's own), by name."""
+    found: dict[str, bytes] = {}
+    for name in sorted(doc.embfile_names()):
+        if name.endswith(".json") and name != EMBEDDED:
+            found[name] = doc.embfile_get(name)
+    return found
+
+
+def _has_decisions(entry: Any) -> bool:
+    """True when a stored page holds something a person decided."""
+    if not isinstance(entry, dict):
+        return False
+    found, chosen = entry.get("layout"), entry.get("filters")
+    return entry.get("correction") is not None or any(
+        isinstance(d, dict) and d.get("by") == "person" for d in (found, chosen))
+
+
 def _words_of(text: PageText) -> list[layout.Word]:
     """The words of a page text with their boxes (the union of their characters')."""
     words: list[layout.Word] = []
@@ -685,6 +697,5 @@ def _tables(regions: list[layout.Region], text: PageText) -> list[Table]:
     return [layout.table_of(r, words) for r in regions if r.kind == "table"]
 
 
-def config_bytes(config: dict[str, Any]) -> bytes:
-    """A configuration as optdoc writes it: JSON, the same bytes for the same content."""
-    return documents.document_bytes(config)
+__all__ = ["EMBEDDED", "FORMAT", "FORMAT_VERSION", "SUFFIX", "Options", "Project",
+           "carried", "config_bytes", "load_config", "open_pdf"]

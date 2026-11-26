@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pymupdf
 
-from optdoc import structure as gl
-from optdoc.ocr import OCRWord, page_text_from_words
-from optdoc.pagetext import PageText, read_text_layer
+from ocrdoc import structure as gl
+from ocrdoc.ocr import OCRWord, page_text_from_words
+from ocrdoc.pagetext import PageText, read_text_layer
 
 
 def _line(text: str, x: float, y: float, h: float = 10.0, chars: float = 5.0,

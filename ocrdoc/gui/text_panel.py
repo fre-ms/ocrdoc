@@ -24,9 +24,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from optdoc import ocr as ocrlib
-from optdoc.gui.words import Words
-from optdoc.project import Project
+from ocrdoc import ocr as ocrlib
+from ocrdoc.gui.words import Words
+from ocrdoc.project import Project
 
 
 class TextPanel(QWidget):

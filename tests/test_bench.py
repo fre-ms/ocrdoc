@@ -11,10 +11,10 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from optdoc import ocr as ocrlib
-from optdoc import tables
-from optdoc.bench import bench, numbers_of, score_text, truth_lines
-from optdoc.cli import main
+from ocrdoc import ocr as ocrlib
+from ocrdoc import tables
+from ocrdoc.bench import bench, numbers_of, score_text, truth_lines
+from ocrdoc.cli import main
 from tests.synthetic import rasterise
 
 _SPEC = importlib.util.spec_from_file_location(

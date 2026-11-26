@@ -1,11 +1,11 @@
-"""The tables of a page with their cells, found by Camelot in the PDF optdoc writes.
+"""The tables of a page with their cells, found by Camelot in the page with its text.
 
 A laboratory reader wants a result as a row of cells (name, value, unit, range, flag),
 not as a line of words to take apart.  Camelot (MIT) finds tables in the text of a PDF:
 its "hybrid" way joins the columns it reads from the alignment of the text with the
-ruled lines it sees in the rendered page.  On a scan or a photo that text is optdoc's
+ruled lines it sees in the rendered page.  On a scan or a photo that text is ocrdoc's
 own invisible layer, whose gaps between cells are left open for this
-(:mod:`optdoc.textlayer`).
+(:mod:`ocrdoc.textlayer`).
 
 Measured on invented laboratory reports in three layouts (a ruled grid, open columns,
 two blocks with the flag before the value; 54 results), as born-digital PDFs and as
@@ -26,7 +26,7 @@ PyMuPDF ``find_tables``, text       39/54      14/54
 
 The five rows Camelot missed on the photos were all cut right; OCR had read "U/l" as
 "U/I".  Tabula needs a Java runtime besides; Camelot is pure Python.  With
-:func:`_distinct` taking each row once, ``optdoc bench`` counts on twelve photographed
+:func:`_distinct` taking each row once, the bench counted on twelve photographed
 reports (all three layouts, two sets of values) 211 of 216 rows cut right and 193 read
 exactly; on the born-digital PDFs of 24 reports every row (432).
 
@@ -34,7 +34,7 @@ Needs the extra "tables".  Camelot is given the path of a PDF: for a path, Camel
 renders pages in memory and writes no file anywhere else (checked with an empty
 temporary folder); a PDF in memory it would write to the temporary folder first.  The
 project writes the page it looks at into a folder of its own for a moment
-(:meth:`optdoc.project.Project.find_regions`).
+(:meth:`ocrdoc.project.Project.find_regions`).
 """
 
 from __future__ import annotations
@@ -73,7 +73,7 @@ class Cell:
 class Table:
     """A table: its rows of cells, top to bottom, each left to right, its box, the
     confidence of the automatic finder in it (0 to 1), and who set its grid: "auto"
-    (found) or "person" (set or corrected in the window, :mod:`optdoc.layout`)."""
+    (found) or "person" (set or corrected in the window, :mod:`ocrdoc.layout`)."""
 
     rows: list[list[Cell]] = field(default_factory=list)
     confidence: float = 0.0
@@ -94,14 +94,14 @@ class Table:
 
 def _shown(page: pymupdf.Page, x0: float, y0: float, x1: float, y1: float) -> Box:
     """A box in Camelot's coordinates (points from the bottom left of the media box) as
-    points from the top left of the page as shown (optdoc's pages are upright)."""
+    points from the top left of the page as shown (ocrdoc's pages are upright)."""
     top = page.mediabox.height
     dx, dy = page.cropbox.x0, page.cropbox.y0
     return (min(x0, x1) - dx, top - max(y0, y1) - dy, max(x0, x1) - dx, top - min(y0, y1) - dy)
 
 
 def _table(found: Any, page: pymupdf.Page) -> Table | None:
-    """optdoc's form of a table Camelot found; None for fewer than two rows or columns,
+    """ocrdoc's form of a table Camelot found; None for fewer than two rows or columns,
     which is no table worth the name."""
     texts = found.df.values.tolist()
     if len(found.cells) < 2 or len(found.cells[0]) < 2:

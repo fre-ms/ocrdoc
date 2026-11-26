@@ -23,9 +23,9 @@ from typing import TYPE_CHECKING, Any, NamedTuple, Protocol
 import pymupdf
 from doccor.offline import no_telemetry
 
-from optdoc.errors import OCRError, OptdocError
-from optdoc.pagetext import PageText
-from optdoc.settings import load_settings
+from ocrdoc.errors import OcrdocError, OCRError
+from ocrdoc.pagetext import PageText
+from ocrdoc.settings import load_settings
 
 if TYPE_CHECKING:
     from rapidocr import RapidOCR
@@ -162,7 +162,7 @@ class TesseractBackend:
     """Tesseract with ``--psm 3`` for the page and, when asked for, a second pass for
     tables: Tesseract's layout analysis takes a boxed grid for graphics and drops the
     cells (a bordered medication table came back as a single word).  For every grid
-    :func:`cleanup.grid_areas` finds, the crop is read again without its rules
+    :func:`filters.grid_areas` finds, the crop is read again without its rules
     as one block (``--psm 6``); the reading with the higher confidence mass wins the box.
     Measured on synthetic bordered tables at 200 dpi: 0 of 45 cell words → 42; pages
     without grids are untouched."""
@@ -221,13 +221,13 @@ class TesseractBackend:
         """The second pass: every table grid on the page is read again without its
         rules as one block, and the better reading replaces the words in the grid's box.
         Needs OpenCV; without it the words come back unchanged."""
-        from optdoc import cleanup
+        from ocrdoc import filters
 
-        if not cleanup.available():
+        if not filters.available():
             return words
         image = _image_from_pixmap(pix)
         margin, padding = 10, 30
-        for grid in cleanup.grid_areas(image):
+        for grid in filters.grid_areas(image):
             x0, y0, x1, y1 = _with_margin(grid, margin, pix.width, pix.height)
             png = _grid_png(image[y0:y1, x0:x1], padding)
             if png is None:
@@ -252,9 +252,9 @@ def _grid_png(crop: Any, padding: int) -> bytes | None:
     None when OpenCV cannot encode the image."""
     import cv2
 
-    from optdoc import cleanup
+    from ocrdoc import filters
 
-    without = cleanup.without_lines(crop)
+    without = filters.remove_lines(crop)
     white = (255, 255, 255) if without.ndim == 3 else 255
     without = cv2.copyMakeBorder(without, padding, padding, padding, padding, cv2.BORDER_CONSTANT,
                               value=white)
@@ -340,7 +340,7 @@ class RapidOCRBackend:
         model takes over for good."""
         try:
             return self._engine(image, return_word_box=True, use_cls=self.turn_lines)
-        except OptdocError:
+        except OcrdocError:
             raise  # the network guard, for one: its kind says more than "failed"
         except Exception as e:
             if self._default:
@@ -349,7 +349,7 @@ class RapidOCRBackend:
         self._default = True
         try:
             return self._engine(image, return_word_box=True, use_cls=self.turn_lines)
-        except OptdocError:
+        except OcrdocError:
             raise
         except Exception as e:
             raise OCRError("reader-failed", reader="rapidocr") from e
@@ -409,7 +409,7 @@ _BACKEND_NAMES = ("rapidocr", "tesseract", "none")
 
 
 def _preferred_backend(name: str) -> str:
-    """The name "auto" resolved to the configured preference (``OPTDOC_OCR``, or what
+    """The name "auto" resolved to the configured preference (``OCRDOC_OCR``, or what
     the calling application set) when that names an engine or "none"; any other name
     unchanged."""
     if name != "auto":
@@ -433,7 +433,7 @@ def _first_available(languages: str | None, tables: bool) -> OCRBackend | None:
 def backend(name: str = "auto", languages: str | None = None,
             tables: bool = True) -> OCRBackend | None:
     """Return the requested backend, or for "auto" the configured preference
-    (``OPTDOC_OCR``, or what the calling application set), else the first
+    (``OCRDOC_OCR``, or what the calling application set), else the first
     available one; None for "none".  ``languages`` names the language packs:
     "deu+eng" for Tesseract, a RapidOCR language type such as "de" or "latin";
     ``tables`` switches Tesseract's second pass for table grids."""
@@ -521,7 +521,7 @@ def page_text_from_words(
     """Group words into lines by vertical overlap, order them, and build the character map.
     A gap wider than the word is high (table cells, columns) becomes a tab in the page
     text: the rules treat it like a space, the Markdown structuring reads it as a cell
-    boundary, and the text layer leaves the gap open there (:mod:`optdoc.textlayer`)."""
+    boundary, and the text layer leaves the gap open there (:mod:`ocrdoc.textlayer`)."""
     page_text = PageText(number=number, width=width, height=height, source="ocr")
     for line_no, line in enumerate(_lines_from_words(words), 1):
         for i, w in enumerate(line):

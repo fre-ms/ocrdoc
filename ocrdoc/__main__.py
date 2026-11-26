@@ -1,5 +1,5 @@
-"""``python -m optdoc``."""
+"""``python -m ocrdoc``."""
 
-from optdoc.cli import main
+from ocrdoc.cli import main
 
 raise SystemExit(main())

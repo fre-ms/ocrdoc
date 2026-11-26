@@ -6,7 +6,7 @@ geometry of the lines tells the layout: a line that runs to the right margin goe
 in the next one; a gap taller than the usual line spacing ends a paragraph; a line in
 a larger face, or a short bold line on its own, is a heading; a bullet starts a list
 item; big gaps inside a line (tabs in the page text, see
-:func:`~optdoc.ocr.page_text_from_words`) are table cells.
+:func:`~ocrdoc.ocr.page_text_from_words`) are table cells.
 
 The roles are computed once from the OCR geometry and applied to the page text later,
 raw or with the pseudonyms in place: both have the same lines.  Italics are not
@@ -25,7 +25,7 @@ from typing import Any
 
 import pymupdf
 
-from optdoc.pagetext import Box, PageText
+from ocrdoc.pagetext import Box, PageText
 
 _BULLET = re.compile(r"^(?:(?P<symbol>[-•·▪◦●○■□*–—>])|(?P<number>\d{1,2}[.)])"
                           r"|(?P<letter>[a-zA-Z][.)]))\s+(?=\S)")
@@ -88,7 +88,7 @@ class Structure:
     def use_tables(self, page_text: PageText,
                    tables: list[tuple[Box, list[list[str]]]]) -> None:
         """Tables whose grid is known (a box and the texts of its cells, row by row,
-        :mod:`optdoc.layout`): the lines whose middle lies in a table's box are its rows,
+        :mod:`ocrdoc.layout`): the lines whose middle lies in a table's box are its rows,
         and the table is written from its cells, not from the gaps between words."""
         lines = lines_of(page_text)
         for k, (box, rows) in enumerate(tables):

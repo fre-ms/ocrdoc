@@ -1,5 +1,5 @@
 """Tables with their cells: every result row of the invented laboratory reports as a
-row of cells, in born-digital PDFs and in optdoc's PDFs of photos; none in a letter;
+row of cells, in born-digital PDFs and in scans of them; none in a letter;
 each table once; the cells where the words are."""
 
 from __future__ import annotations
@@ -11,12 +11,12 @@ from pathlib import Path
 
 import pytest
 
-from optdoc import ocr as ocrlib
-from optdoc import output, tables
-from optdoc.bench import score_tables
-from optdoc.reading import read
-from optdoc.tables import Cell, Table, find_tables
-from tests.synthetic import lab_report, photograph
+from ocrdoc import ocr as ocrlib
+from ocrdoc import output, tables
+from ocrdoc.bench import score_tables
+from ocrdoc.reading import read
+from ocrdoc.tables import Cell, Table, find_tables
+from tests.synthetic import lab_report, scan
 
 pytestmark = pytest.mark.skipif(not tables.available(), reason="needs Camelot (extra 'tables')")
 needs_backend = pytest.mark.skipif(not ocrlib.available_backends(),
@@ -59,12 +59,12 @@ def test_pdf_is_let_go(tmp_path: Path) -> None:
 
 
 @needs_backend
-def test_photographed_report(tmp_path: Path) -> None:
-    """A photo of the ruled report, read by optdoc: every row once, cut into the right
-    cells, each cell's box around the word printed in it; the reading carries
-    the tables, unless they are not wanted."""
+def test_scanned_report(tmp_path: Path) -> None:
+    """A grainy scan of the ruled report, read by OCR: every row once, cut into the right
+    cells, each cell's box around the word printed in it; the reading carries the tables,
+    unless they are not wanted."""
     pdf, _ = lab_report(tmp_path, 1)
-    reading = read(photograph(pdf, tmp_path / "foto.jpg"))
+    reading = read(scan(pdf, tmp_path / "foto.pdf", dpi=150, noise=0.005))
     try:
         paths = output.write(reading, tmp_path / "out")
         words = reading.pages[0].text
@@ -85,7 +85,7 @@ def test_photographed_report(tmp_path: Path) -> None:
         assert page["regions"][0]["kind"] == "table" and page["regions"][0]["table"] == 0
     finally:
         reading.close()
-    reading = read(tmp_path / "foto.jpg", cells=False)
+    reading = read(tmp_path / "foto.pdf", cells=False)
     try:
         output.write(reading, tmp_path / "ohne")
         assert reading.tables is None
@@ -120,24 +120,3 @@ def test_each_row_once() -> None:
     both = Table([*grid.rows, *second], 0.79)
     found = tables._distinct([both, grid])
     assert found == [grid, Table(second, 0.79)]
-
-
-@needs_backend
-def test_a_slightly_tilted_scan_keeps_its_table(tmp_path: Path) -> None:
-    """A report scanned half a degree askew: straightened by the suggestion, its table
-    keeps its grid (unstraightened, Camelot cut no row right)."""
-    from optdoc.project import Options, Project
-    from tests.synthetic import scan
-
-    pdf, _ = lab_report(tmp_path, 2)
-    project = Project.open(scan(pdf, tmp_path / "scan.pdf", rotation=0.5), Options(areas=False))
-    try:
-        assert project.plan(0).straighten
-        reading = project.build()
-        try:
-            score = score_tables(_cells(pdf), _texts(reading.tables or {}))
-        finally:
-            reading.close()
-    finally:
-        project.close()
-    assert score.table_rows_cut_right >= 16, score

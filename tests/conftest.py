@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from optdoc.settings import set_settings
+from ocrdoc.settings import set_settings
 from tests.synthetic import make_report
 
 

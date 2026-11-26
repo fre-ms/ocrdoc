@@ -1,17 +1,18 @@
 """What a reading leaves behind: a searchable PDF, the reading as JSON, the text as
-Markdown, and the configuration that makes it again (:mod:`optdoc.project`).
+Markdown, and the configuration that makes it again (:mod:`ocrdoc.project`).
 
-The PDF is the cleaned-up document; the OCR text is laid invisibly over the place where
-it is printed, line by line (:mod:`optdoc.textlayer`), so that a reader can search and
-select the text of a scan like that of a born-digital document, and a program that
-takes the text out gets a printed row as one line.  The JSON names every word with its
-box in page points and the engine's confidence; it is meant for programs in other
-languages (a records app, a laboratory reader) and says which version of optdoc and
-which engine made it.
+The PDF is the input with its pages as they came; the OCR text is laid invisibly over
+the place where it is printed, line by line (:mod:`ocrdoc.textlayer`), so that a reader
+can search and select the text of a scan like that of a born-digital document, and a
+program that takes the text out gets a printed row as one line.  The JSON names every
+word with its box in page points and the engine's confidence; it is meant for programs
+in other languages (a records app, a laboratory reader) and says which version of
+ocrdoc and which engine made it.
 
-The same reading and configuration always give the same bytes: the PDF carries no time
-and a file identifier made from its configuration, which it also carries as an
-embedded file (``optdoc.json``) without dates.
+The same input and configuration always give the same bytes: the PDF carries no time
+and a file identifier made from the configuration documents of every step that made it.
+It carries them too, as embedded files without dates: those of the steps before as the
+input had them (``optdoc.json``), and ocrdoc's own (``ocrdoc.json``).
 """
 
 from __future__ import annotations
@@ -23,14 +24,14 @@ from typing import Any
 import pymupdf
 from doccor import documents
 
-from optdoc import __version__, textlayer
-from optdoc.errors import OptdocError
-from optdoc.pagetext import PageText
-from optdoc.project import EMBEDDED, SUFFIX, config_bytes
-from optdoc.reading import PageReading, Reading
-from optdoc.tables import Table
+from ocrdoc import __version__, textlayer
+from ocrdoc.errors import OcrdocError
+from ocrdoc.pagetext import PageText
+from ocrdoc.project import EMBEDDED, SUFFIX, config_bytes
+from ocrdoc.reading import PageReading, Reading
+from ocrdoc.tables import Table
 
-FORMAT = "optdoc-reading"
+FORMAT = "ocrdoc-reading"
 FORMAT_VERSION = 1
 
 
@@ -96,20 +97,15 @@ def _page_as_dict(s: PageReading, tables: list[Table] | None) -> dict[str, Any]:
     }
 
 
-def plan_as_dict(reading: Reading) -> dict[str, Any]:
-    """The clean-up plan by page number (counted from 1), every switch and corner."""
-    return {str(n + 1): a.full_dict() for n, a in sorted(reading.plan.items())}
-
-
 def reading_as_dict(reading: Reading) -> dict[str, Any]:
     """The reading as a JSON-ready dictionary."""
+    named = (reading.config or {}).get("input", {})
     return {
         "format": FORMAT,
         "version": FORMAT_VERSION,
-        "made_with": f"optdoc {__version__}",
+        "made_with": f"ocrdoc {__version__}",
         "reader": reading.reader,
-        "source": reading.source.name,
-        "plan": plan_as_dict(reading),
+        "input": {"sha256": named.get("sha256")},
         "pages": [_page_as_dict(s, None if reading.tables is None
                                 else reading.tables.get(s.number, []))
                   for s in reading.pages],
@@ -123,9 +119,9 @@ def markdown(reading: Reading) -> str:
 
 
 def searchable_pdf(reading: Reading) -> bytes:
-    """The cleaned-up document with an invisible text layer on every OCR page, carrying
-    the configuration; its file identifier is made from the configuration, so that the
-    same reading gives the same bytes."""
+    """The input with an invisible text layer on every OCR page, carrying the
+    configuration documents of the steps before and ocrdoc's own; its file identifier is
+    made from them, so that the same input and configuration give the same bytes."""
     duplicate = pymupdf.open("pdf", reading.doc.tobytes())
     try:
         font = None
@@ -133,20 +129,23 @@ def searchable_pdf(reading: Reading) -> bytes:
             if s.ocr:
                 font = font or textlayer.add_font(duplicate)
                 textlayer.write_page(duplicate, duplicate[s.number], s.text, font)
+        if EMBEDDED in duplicate.embfile_names():
+            duplicate.embfile_del(EMBEDDED)  # an input ocrdoc wrote before: its own goes
         config = config_bytes(reading.config) if reading.config is not None else b""
         if config:
             documents.embed(duplicate, EMBEDDED, config,
-                            "optdoc configuration: makes this PDF again from the original")
-        return documents.finished_pdf(duplicate, [config], f"optdoc {__version__}")
+                            "ocrdoc configuration: reads the input of this step again")
+        chain = [reading.carried[name] for name in sorted(reading.carried)] + [config]
+        return documents.finished_pdf(duplicate, chain, f"ocrdoc {__version__}")
     finally:
         duplicate.close()
 
 
 def write(reading: Reading, folder: str | Path, stem: str | None = None) -> dict[str, Path]:
     """Write ``<stem>.pdf``, ``<stem>.reading.json``, ``<stem>.md`` and the
-    configuration ``<stem>.optdoc.json`` (where the reading has one) into ``folder``
+    configuration ``<stem>.ocrdoc.json`` (where the reading has one) into ``folder``
     (created when missing); returns the paths.  Nothing is written anywhere else.  Raises
-    :class:`~optdoc.errors.OptdocError`: "same-as-source" when the PDF would replace the
+    :class:`~ocrdoc.errors.OcrdocError`: "same-as-source" when the PDF would replace the
     document that was read, "unwritable" when the folder cannot take the files."""
     target = Path(folder)
     stem = stem or reading.source.stem
@@ -157,13 +156,13 @@ def write(reading: Reading, folder: str | Path, stem: str | None = None) -> dict
         "config": target / f"{stem}{SUFFIX}",
     }
     if paths["pdf"].resolve() == reading.source.resolve():
-        raise OptdocError("same-as-source")
+        raise OcrdocError("same-as-source")
     pdf = searchable_pdf(reading)
     try:
         target.mkdir(parents=True, exist_ok=True)
         paths["pdf"].write_bytes(pdf)
     except OSError as e:
-        raise OptdocError("unwritable") from e
+        raise OcrdocError("unwritable") from e
     contents = {
         "reading": json.dumps(reading_as_dict(reading), ensure_ascii=False,
                               indent=1).encode("utf-8"),
@@ -177,5 +176,5 @@ def write(reading: Reading, folder: str | Path, stem: str | None = None) -> dict
         for key, data in contents.items():
             paths[key].write_bytes(data)
     except OSError as e:
-        raise OptdocError("unwritable") from e
+        raise OcrdocError("unwritable") from e
     return paths

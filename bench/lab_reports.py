@@ -1,13 +1,14 @@
-"""Invented laboratory reports for the test bench: print them, photograph them the way
-real reports arrive, and let ``optdoc bench`` measure the readings.
+"""Invented laboratory reports for the test bench: print them, scan or photograph them the
+way real reports arrive, and let ``ocrdoc bench`` measure the readings.
 
     uv run python bench/lab_reports.py <folder> [count] [seed]
 
 writes ``lab-01.pdf`` … and next to each ``lab-01.truth.txt`` (one line per result, as
 printed) and ``lab-01.cells.json`` (the cells of each result's row, as printed, for the
-table figures).  Save the photo of ``lab-01.pdf`` as ``lab-01.jpg`` (or .heic, .png) in the same
-folder; the bench pairs a photo with the truth file of the same name.  Everything here is
-made up: the laboratory, the patient, the values.
+table figures).  Put the scan of ``lab-01.pdf`` beside it under a name of its own, with a
+copy of the truth file of that name (a photo goes through optdoc first, which makes it a
+PDF); the bench pairs a PDF with the truth file of the same name.  Everything here is made
+up: the laboratory, the patient, the values.
 
 Three layouts, as laboratories print them: a ruled grid, open columns, and two blocks
 (blood count and chemistry) with a flag column.  Values have decimal commas, some carry

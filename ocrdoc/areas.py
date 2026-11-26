@@ -1,5 +1,5 @@
 """Finding the areas of a page that are not plain text: barcodes (read as well),
-pictures, stamps and handwriting (:mod:`optdoc.layout` keeps them).
+pictures, stamps and handwriting (:mod:`ocrdoc.layout` keeps them).
 
 Each finder looks at the cleaned page as an image, together with the words read on it;
 what it finds is a suggestion, shown in the window to be corrected.  The mistakes are
@@ -25,7 +25,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from optdoc.layout import Box, Region
+from ocrdoc.layout import Box, Region
 
 MM = 72 / 25.4  # points per millimetre
 WORK_DPI = 100  # pictures, stamps and handwriting are looked for at this resolution
@@ -52,7 +52,7 @@ def find_barcodes(image: Any, scale: float) -> list[Region]:
         return []
     import zxingcpp
 
-    from optdoc.cleanup import _grey
+    from ocrdoc.filters import grey as _grey
 
     grey = _grey(image)
     found = []

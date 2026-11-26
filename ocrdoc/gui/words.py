@@ -1,8 +1,8 @@
-"""Every word optdoc's window shows, in English and German, registered with the words of
+"""Every word ocrdoc's window shows, in English and German, registered with the words of
 doccor (:mod:`doccor.gui.words`), which give them in the language of the application that
-opens the window (``--language``), else that of the system.  Text that comes from optdoc's
-core (the description of a clean-up, an error) has its own two languages
-(:func:`optdoc.cleanup.describe`, :func:`optdoc.errors.describe_error`).
+opens the window (``--language``), else that of the system.  A tool's name is a
+placeholder (``{tool}``), so that the words of several tools can live in one program.  An
+error has its own two languages (:func:`ocrdoc.errors.describe_error`).
 """
 
 from __future__ import annotations
@@ -11,10 +11,10 @@ from doccor.gui import words as _words
 from doccor.gui.words import LANGUAGES, Words, system_language
 
 WORDS: dict[str, tuple[str, str]] = {  # key: (English, German)
-    "title": ("optdoc: {name}", "optdoc: {name}"),
+    "title": ("{tool}: {name}", "{tool}: {name}"),
     "page": ("Page {number}", "Seite {number}"),
     "page_corrected": ("Page {number} ✎", "Seite {number} ✎"),
-    "tab_cleanup": ("1 Clean up", "1 Aufbereiten"),
+    "tab_filters": ("1 Filters", "1 Filter"),
     "tab_regions": ("2 Areas", "2 Bereiche"),
     "tab_text": ("3 Check the text", "3 Text prüfen"),
     "apply": ("Apply", "Übernehmen"),
@@ -26,64 +26,57 @@ WORDS: dict[str, tuple[str, str]] = {  # key: (English, German)
     "reading_page": ("Reading page {number} of {total} …", "Lese Seite {number} von {total} …"),
     "read_all": ("Every page read.", "Alle Seiten gelesen."),
     "failed": ("That did not work: {error}", "Das ging nicht: {error}"),
-    # clean-up
-    "before": ("Before (drag the blue corners onto the sheet's corners to unwarp it)",
-               "Vorher (die blauen Ecken auf die Ecken des Blatts ziehen, um es zu entzerren)"),
-    "after": ("After (as OCR sees it; drag erases an area white, Cmd/Ctrl+Z takes it back; "
-              "Shift/Option + drag moves both views)",
-              "Nachher (so sieht es die Texterkennung; Ziehen löscht den Bereich weiß, "
-              "Cmd/Strg+Z holt ihn zurück; Umschalt/Option + Ziehen verschiebt beide Ansichten)"),
-    "steps": ("Steps for this page", "Schritte für diese Seite"),
-    "straighten": ("Straighten the tilt", "Schräglage begradigen"),
-    "unwarp": ("Unwarp the photographed sheet", "Fotografiertes Blatt entzerren"),
+    # filters
+    "filters_page": ("The page as it is (it stays so in the PDF)",
+                     "Die Seite, wie sie ist (so bleibt sie im PDF)"),
+    "filters_ocr": ("As OCR reads it (the filters change only this copy; Shift/Option + drag "
+                    "moves both views)",
+                    "So liest sie die Texterkennung (die Filter ändern nur diese Kopie; "
+                    "Umschalt/Option + Ziehen verschiebt beide Ansichten)"),
+    "filters": ("Filters for OCR on this page", "Filter für die Texterkennung dieser Seite"),
     "upscale": ("Upscale", "Hochskalieren"),
     "not": ("not", "nicht"),
     "upscale_tip": ("OCR reads the page at that multiple of the resolution (up to 4×, at most "
-                    "9000 pixels); the page itself is not stored enlarged.",
+                    "9000 pixels): for scans and photos of low resolution.",
                     "Die Texterkennung liest die Seite mit dem Vielfachen der Auflösung (bis 4×, "
-                    "höchstens 9000 Pixel); die Seite selbst wird nicht vergrößert gespeichert."),
-    "letter_mode": ("Letter mode: Lanczos enlargement, strokes sharpened",
-                    "Buchstabenmodus: Lanczos-Vergrößerung, Striche geschärft"),
-    "letter_tip": ("Enlarges with Lanczos and sharpens the strokes in grey. A hard black-and-white "
-                   "threshold made recognition much worse in measurements, so the image stays "
-                   "grey. Replaces background, sharpening and black-and-white.",
-                   "Vergrößert mit Lanczos und schärft die Striche in Graustufen. Eine harte "
-                   "Schwarz-Weiß-Schwelle verschlechterte die Erkennung in Messungen deutlich, "
-                   "deshalb bleibt das Bild grau. Ersetzt Hintergrund, Schärfen und Schwarz-Weiß."),
-    "background": ("Even out the background (shadows, grey paper)",
-                   "Hintergrund glätten (Schatten, graues Papier)"),
+                    "höchstens 9000 Pixel): für Scans und Fotos geringer Auflösung."),
+    "letter_mode": ("Letter mode: grey, strokes sharpened",
+                    "Buchstabenmodus: grau, Striche geschärft"),
+    "letter_mode_tip": ("Sharpens the strokes in grey, best with upscaling. A hard black-and-white "
+                        "threshold made recognition much worse in measurements, so the image "
+                        "stays grey.",
+                        "Schärft die Striche in Graustufen, am besten mit Hochskalieren. Eine "
+                        "harte Schwarz-Weiß-Schwelle verschlechterte die Erkennung in Messungen "
+                        "deutlich, deshalb bleibt das Bild grau."),
+    "remove_colour": ("Take coloured ink away (stamps, highlighter, blue signatures)",
+                      "Farbige Tinte wegnehmen (Stempel, Marker, blaue Unterschriften)"),
+    "remove_colour_tip": ("Coloured ink becomes white, so that it hides no print beneath it; the "
+                          "stamp stays in the document and is found as an area.",
+                          "Farbige Tinte wird weiß, damit sie keinen Druck darunter verdeckt; der "
+                          "Stempel bleibt im Dokument und wird als Bereich erkannt."),
+    "remove_lines": ("Take ruled lines away (forms, tables)",
+                     "Linien wegnehmen (Formulare, Tabellen)"),
+    "remove_lines_tip": ("Long horizontal and vertical lines become white; the grid of a table "
+                         "is found all the same.",
+                         "Lange waagrechte und senkrechte Linien werden weiß; das Gitter einer "
+                         "Tabelle wird trotzdem erkannt."),
     "black_white": ("Black and white", "Schwarz-Weiß"),
-    "further": ("Further steps", "Weitere Schritte"),
-    "borders": ("Clean dark borders", "Dunkle Ränder säubern"),
-    "remove_colour": ("Remove coloured ink (stamps, highlighter)",
-                      "Farbige Tinte entfernen (Stempel, Marker)"),
-    "denoise": ("Denoise (grain, dust)", "Entrauschen (Körnung, Staub)"),
-    "contrast": ("Raise the contrast (faint copies)", "Kontrast anheben (blasse Kopien)"),
-    "sharpen": ("Sharpen", "Schärfen"),
-    "remove_lines": ("Remove lines (forms, tables)", "Linien entfernen (Formulare, Tabellen)"),
-    "strength": ("Strength 1 (gentle) to 5 (strong)", "Stärke 1 (sanft) bis 5 (kräftig)"),
-    "orientation": ("Detect the orientation", "Ausrichtung erkennen"),
-    "orientation_tip": ("Portrait or landscape from the text lines; whether the text stands on its "
-                        "head is decided by a short OCR comparison (takes a few seconds).",
-                        "Hoch- oder Querformat aus den Textzeilen; ob der Text auf dem Kopf steht, "
-                        "entscheidet ein kurzer Vergleich der Texterkennung (dauert einige "
-                        "Sekunden)."),
-    "rotate": ("Rotate", "Drehen"),
-    "undo_mask": ("Take back the last area (Cmd/Ctrl+Z)",
-                  "Letzten Bereich zurückholen (Cmd/Strg+Z)"),
-    "clear_masks": ("Take back all", "Alle zurückholen"),
+    "black_white_tip": ("An adaptive threshold; not with letter mode, where it read worse.",
+                        "Eine anpassende Schwelle; nicht im Buchstabenmodus, wo sie schlechter "
+                        "las."),
     "restore": ("Restore the suggestion", "Vorschlag wiederherstellen"),
-    "skip": ("Do not clean up this page", "Diese Seite nicht aufbereiten"),
-    "to_all": ("Copy the steps to every page", "Schritte auf alle Seiten übertragen"),
-    "no_opencv": ("Cleaning up needs OpenCV and NumPy (extra 'ocr').",
-                  "Aufbereiten braucht OpenCV und NumPy (Extra „ocr“)."),
-    "has_layer": ("This page has a text layer of its own; it is read as it is, not cleaned up.",
-                  "Diese Seite hat eine eigene Textebene; sie wird gelesen, wie sie ist, nicht "
-                  "aufbereitet."),
-    "no_sheet": ("no photographed sheet found; drag the corners in “Before” onto it",
-                 "kein fotografiertes Blatt erkannt; in „Vorher“ die Ecken darauf ziehen"),
-    "orientation_failed": ("Orientation not found: {error}", "Ausrichtung nicht erkannt: {error}"),
-    "cleanup_failed": ("Clean-up failed: {error}", "Aufbereitung fehlgeschlagen: {error}"),
+    "no_filters": ("No filter on this page", "Kein Filter auf dieser Seite"),
+    "to_all": ("Copy the filters to every page", "Filter auf alle Seiten übertragen"),
+    "filters_suggested": ("The filters {tool} suggests for this page.",
+                          "Die Filter, die {tool} für diese Seite vorschlägt."),
+    "filters_chosen": ("Filters chosen by hand; the page is read again.",
+                       "Von Hand gewählte Filter; die Seite wird neu gelesen."),
+    "filters_none_needed": ("This page has a text layer of its own; it is read as it is, "
+                            "without OCR.",
+                            "Diese Seite hat eine eigene Textebene; sie wird gelesen, wie sie ist, "
+                            "ohne Texterkennung."),
+    "no_opencv": ("Filters need OpenCV and NumPy (extra 'ocr').",
+                  "Filter brauchen OpenCV und NumPy (Extra „ocr“)."),
     # text
     "page_image": ("The page as OCR read it (click a word to find it in the text; yellow: "
                    "read with little confidence)",
@@ -135,7 +128,7 @@ WORDS: dict[str, tuple[str, str]] = {  # key: (English, German)
                      "Handschrift und Stempel werden gelesen und markiert. Die Nummern sind die "
                      "Lesereihenfolge. Entf oder Rückschritt löscht den ausgewählten Bereich, "
                      "Escape kehrt zum Auswählen zurück."),
-    "regions_auto": ("Areas found by optdoc: {count}", "Von optdoc erkannte Bereiche: {count}"),
+    "regions_auto": ("Areas found by {tool}: {count}", "Von {tool} erkannte Bereiche: {count}"),
     "regions_person": ("Areas set by hand: {count}", "Von Hand gesetzte Bereiche: {count}"),
     "regions_table": ("Table selected: {rows} rows, {columns} columns",
                       "Ausgewählte Tabelle: {rows} Zeilen, {columns} Spalten"),

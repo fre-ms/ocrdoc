@@ -3,12 +3,12 @@ stamp, or not to be read, and for a table its grid.
 
 FineReader's way: before the text is read, the page is divided into regions, found
 automatically and corrected by a person, and a table's grid of rows and columns can be
-moved, added to, taken away from and its cells merged.  optdoc keeps the regions of a
+moved, added to, taken away from and its cells merged.  ocrdoc keeps the regions of a
 page in its configuration like everything else that decides the result
-(:mod:`optdoc.project`), so that they are reproduced and the work can be resumed.
+(:mod:`ocrdoc.project`), so that they are reproduced and the work can be resumed.
 
-A region's box is in points of the cleaned page (from its top left, as the masks of the
-clean-up).  The order of the regions is their reading order.  What lies in no region is
+A region's box is in points of the page as shown (from its top left, as the boxes of the
+words).  The order of the regions is their reading order.  What lies in no region is
 read as text, so that regions are needed only where they change something:
 
 =============  ==================================================================
@@ -33,8 +33,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from optdoc.errors import OptdocError
-from optdoc.tables import Cell, Table
+from ocrdoc.errors import OcrdocError
+from ocrdoc.tables import Cell, Table
 
 Box = tuple[float, float, float, float]
 Span = tuple[int, int, int, int]  # first row, first column, last row, last column
@@ -125,9 +125,9 @@ class Region:
                                      else float(d["confidence"])),
                          format=d.get("format"), content=d.get("content"))
         except (KeyError, TypeError, ValueError) as e:
-            raise OptdocError("bad-config", reason="field") from e
+            raise OcrdocError("bad-config", reason="field") from e
         if not region.valid():
-            raise OptdocError("bad-config", reason="field")
+            raise OcrdocError("bad-config", reason="field")
         return region
 
     def valid(self) -> bool:
@@ -251,7 +251,7 @@ def table_of(region: Region, words: list[Word]) -> Table:
 
 
 def from_table(table: Table) -> Region:
-    """A table region from a table found automatically (:mod:`optdoc.tables`): its box,
+    """A table region from a table found automatically (:mod:`ocrdoc.tables`): its box,
     and the lines between its rows and columns where its cells meet."""
     first = table.rows[0]
     columns = sorted(_middle_of([row[c].box[2] for row in table.rows if len(row) > c])
@@ -402,5 +402,5 @@ def moved(region: Region, box: Box) -> Region:
 def regions_from_dicts(value: Any) -> list[Region]:
     """The regions of a page from the configuration (a list)."""
     if not isinstance(value, list):
-        raise OptdocError("bad-config", reason="field")
+        raise OcrdocError("bad-config", reason="field")
     return [Region.from_dict(d) for d in value]

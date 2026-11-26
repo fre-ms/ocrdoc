@@ -1,4 +1,4 @@
-"""OCR: engine output to page text, scans and photos read, tables, engine choice."""
+"""OCR: engine output to page text, scans read, filters, tables, engine choice."""
 
 from __future__ import annotations
 
@@ -8,12 +8,13 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from optdoc import cleanup
-from optdoc import ocr as ocrlib
-from optdoc.loading import open_document
-from optdoc.ocr import OCRWord, page_text_from_words
-from optdoc.reading import read
-from optdoc.settings import Settings, set_settings
+from ocrdoc import filters
+from ocrdoc import ocr as ocrlib
+from ocrdoc.filters import Filters
+from ocrdoc.ocr import OCRWord, page_text_from_words
+from ocrdoc.project import Project
+from ocrdoc.reading import read
+from ocrdoc.settings import Settings, set_settings
 from tests.synthetic import REPORT_TEXT, rasterise, scan
 
 BACKENDS = ocrlib.available_backends()
@@ -58,20 +59,6 @@ def test_noisy_tilted_scan(tmp_path: Path, report: Path) -> None:
         reading.close()
 
 
-@needs_backend
-def test_photo_as_png(tmp_path: Path, report: Path) -> None:
-    with pymupdf.open(report) as d:
-        image = tmp_path / "photo.png"
-        d[0].get_pixmap(dpi=150).save(image)
-    reading = read(image)
-    try:
-        assert len(reading.pages) == 1 and reading.pages[0].ocr
-        assert (round(reading.doc[0].rect.width), round(reading.doc[0].rect.height)) == (595, 842)
-        assert "Diagnosen" in reading.pages[0].text.text
-    finally:
-        reading.close()
-
-
 def test_without_backend_the_scan_has_no_text(tmp_path: Path, report: Path) -> None:
     reading = read(scan(report, tmp_path / "scan.pdf"), reader="none")
     try:
@@ -83,7 +70,7 @@ def test_without_backend_the_scan_has_no_text(tmp_path: Path, report: Path) -> N
 def test_text_layer_needs_no_ocr(report: Path) -> None:
     reading = read(report)
     try:
-        assert not any(s.ocr for s in reading.pages) and reading.plan == {}
+        assert not any(s.ocr for s in reading.pages)
         assert "Ramipril" in reading.pages[0].text.text
     finally:
         reading.close()
@@ -95,23 +82,8 @@ def test_unknown_backend() -> None:
     assert caught.value.kind == "unknown-reader"
 
 
-def test_open_heic(tmp_path: Path, report: Path) -> None:
-    pillow_heif = pytest.importorskip("pillow_heif")
-    from PIL import Image
-
-    pillow_heif.register_heif_opener()
-    with pymupdf.open(report) as d:
-        pix = d[0].get_pixmap(dpi=100, alpha=False)
-    image = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
-    heic = tmp_path / "photo.heic"
-    image.save(heic, format="HEIF")
-    doc = open_document(heic)
-    assert len(doc) == 1 and doc[0].get_images()
-    doc.close()
-
-
 def test_unreadable_line() -> None:
-    from optdoc.ocr import unreadable_lines
+    from ocrdoc.ocr import unreadable_lines
 
     fragments = ["G6ot", "n", "e", "n", "e", "i", "l", "e", "5g"]
     words = [OCRWord(w, 50 + 30 * i, 100, 70 + 30 * i, 112, k)
@@ -129,51 +101,56 @@ def test_unreadable_line() -> None:
 
 
 @needs_backend
-@pytest.mark.skipif(not cleanup.available(), reason="OpenCV fehlt")
-def test_cleanup_before_ocr(tmp_path: Path, report: Path) -> None:
-    """A tilted scan: the suggestion straightens it before OCR and is recorded; an
-    explicit plan wins over the suggestion; a text layer needs no clean-up."""
-    tilted = scan(report, tmp_path / "scan.pdf", rotation=2.5)
-    reading = read(tilted)
+@pytest.mark.skipif(not filters.available(), reason="OpenCV fehlt")
+def test_filters_before_ocr(tmp_path: Path, report: Path) -> None:
+    """A low-resolution scan: the suggestion upscales it for OCR, and the configuration
+    records it; the PDF keeps the page as it came; a text layer needs no filters."""
+    coarse = scan(report, tmp_path / "scan.pdf", dpi=110)
+    project = Project.open(coarse)
     try:
-        assert set(reading.plan) == {0, 1}
-        a = reading.plan[0]
-        assert a.straighten and abs(abs(a.angle) - 2.5) < 0.5, a
-        assert "Ramipril" in reading.pages[0].text.text
+        assert project.filters(0) == Filters(upscale=2)
+        reading = project.build()
+        try:
+            assert "Ramipril" in reading.pages[0].text.text
+            assert reading.config is not None
+            assert reading.config["pages"][0]["filters"]["upscale"] == 2
+            with pymupdf.open(coarse) as before:
+                assert [i[2:4] for i in reading.doc[0].get_images()] == \
+                    [i[2:4] for i in before[0].get_images()]  # the picture as it came
+        finally:
+            reading.close()
     finally:
-        reading.close()
-    own = read(tilted, plan={0: cleanup.CleanupPlan(masks=[(56, 60, 400, 95)])})
+        project.close()
+    digital = Project.open(report)
     try:
-        assert set(own.plan) == {0} and own.plan[0].masks
+        assert digital.filters(0) is None and not digital.needs_ocr(0)
     finally:
-        own.close()
-    raw = read(tilted, clean_up=False)
-    try:
-        assert raw.plan == {}
-    finally:
-        raw.close()
+        digital.close()
 
 
 @needs_backend
-@pytest.mark.skipif(not cleanup.available(), reason="OpenCV fehlt")
-def test_suggestion_does_not_hurt_the_ocr(tmp_path: Path, report: Path) -> None:
-    """Guard for the automatic clean-up: on a noisy, slightly tilted scan the OCR text
-    after the suggested steps must be about as close to the truth as without them."""
+@pytest.mark.skipif(not filters.available(), reason="OpenCV fehlt")
+def test_filters_do_not_hurt_the_ocr(tmp_path: Path, report: Path) -> None:
+    """Guard for the filters: on a noisy, slightly tilted scan the OCR text through the
+    suggested filters, and through letter mode on an enlargement, must be about as close
+    to the truth as without any."""
     truth = " ".join("\n".join(REPORT_TEXT[0]).split())
     noisy = scan(report, tmp_path / "scan.pdf", dpi=150, noise=0.01, rotation=1.0)
 
-    def quality(plan: dict[int, cleanup.CleanupPlan] | None, clean_up: bool = True) -> float:
-        reading = read(noisy, plan=plan, clean_up=clean_up)
+    def quality(chosen: Filters | None) -> float:
+        project = Project.open(noisy)
         try:
-            text = " ".join(reading.pages[0].text.text.split())
+            if chosen is not None:
+                project.set_filters(0, chosen)
+            text = " ".join(project.text(0).split())
         finally:
-            reading.close()
+            project.close()
         return difflib.SequenceMatcher(None, truth, text).ratio()
 
-    g_raw, g_auto = quality(None, clean_up=False), quality(None)
+    g_raw, g_auto = quality(Filters()), quality(None)
     assert g_raw > 0.95, g_raw
     assert g_auto >= g_raw - 0.03, (g_raw, g_auto)
-    g_text = quality({0: cleanup.CleanupPlan(upscale=2, letter_mode=True)})
+    g_text = quality(Filters(upscale=2, letter_mode=True))
     assert g_text >= g_raw - 0.03, (g_raw, g_text)  # the letter mode must not hurt
 
 
@@ -221,15 +198,15 @@ def _cell_words(text: str) -> int:
     return found
 
 
-@pytest.mark.skipif("tesseract" not in BACKENDS or not cleanup.available(),
+@pytest.mark.skipif("tesseract" not in BACKENDS or not filters.available(),
                     reason="Tesseract oder OpenCV fehlt")
 def test_tesseract_reads_tables(tmp_path: Path, report: Path) -> None:
     """Tesseract's page segmentation drops the cells of a bordered table; the second
     pass on the line-free grid gets them back.  Pages without a grid are untouched."""
     image_pdf = _table_page(tmp_path / "tabelle.pdf")
     with pymupdf.open(image_pdf) as d:
-        image, _scale = cleanup.render(d[0], 200)
-        areas = cleanup.grid_areas(image)
+        image, _scale = filters.render(d[0], 200)
+        areas = filters.grid_areas(image)
         assert len(areas) == 1
         x0, y0, x1, y1 = areas[0]
         assert x1 - x0 > image.shape[1] * 0.6 and y1 - y0 > image.shape[0] * 0.1
@@ -239,8 +216,8 @@ def test_tesseract_reads_tables(tmp_path: Path, report: Path) -> None:
     assert _cell_words(with_grid.text) >= _cell_words(without.text) + 10
     assert "Kollegin," in with_grid.text  # the running text is still there
     with pymupdf.open(report) as d:
-        image, _scale = cleanup.render(d[0], 150)
-        assert cleanup.grid_areas(image) == []
+        image, _scale = filters.render(d[0], 150)
+        assert filters.grid_areas(image) == []
 
 
 @needs_backend
@@ -354,7 +331,7 @@ def test_backend_choice_follows_the_settings(monkeypatch: pytest.MonkeyPatch) ->
     """"auto" takes the preference (of the environment, or what an application set)
     when it names an engine or "none"; an unknown preference leaves "auto" in place; an
     unknown name is an error."""
-    monkeypatch.setenv("OPTDOC_OCR", "none")
+    monkeypatch.setenv("OCRDOC_OCR", "none")
     assert ocrlib._preferred_backend("auto") == "none"
     assert ocrlib.backend("AUTO") is None and ocrlib.backend("") is None
     set_settings(Settings(ocr_backend="zauber"))

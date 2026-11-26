@@ -1,4 +1,4 @@
-"""The areas optdoc finds besides tables: barcodes (read as well), pictures, stamps and
+"""The areas ocrdoc finds besides tables: barcodes (read as well), pictures, stamps and
 handwriting, on invented letters born digital and scanned in colour; and none on a
 laboratory report, whose values must all stay in the text."""
 
@@ -9,13 +9,13 @@ from pathlib import Path
 
 import pytest
 
-from optdoc import areas, cleanup, output
-from optdoc import ocr as ocrlib
-from optdoc.project import Options, Project
+from ocrdoc import areas, filters, output
+from ocrdoc import ocr as ocrlib
+from ocrdoc.project import Options, Project
 from tests.synthetic import area_letter, colour_scan, lab_report, scan
 
 pytestmark = [
-    pytest.mark.skipif(not cleanup.available(), reason="needs OpenCV (extra 'ocr')"),
+    pytest.mark.skipif(not filters.available(), reason="needs OpenCV (extra 'ocr')"),
     pytest.mark.skipif(not areas.barcodes_available(), reason="needs zxing-cpp (extra 'barcodes')"),
 ]
 needs_backend = pytest.mark.skipif(not ocrlib.available_backends(),
@@ -66,7 +66,7 @@ def test_areas_of_a_born_digital_letter(tmp_path: Path) -> None:
 @needs_backend
 def test_areas_of_a_letter_scanned_in_colour(tmp_path: Path) -> None:
     """Scanned in colour, turned and grainy, read by OCR: the same areas; the stamp is
-    found although the clean-up takes its colour away before reading.  The reading
+    found although the filters take its colour away before OCR reads the page.  The reading
     names them, a barcode with what it says, and the words in pictures and barcodes are
     not in the text."""
     pdf, truth = area_letter(tmp_path, 2)
@@ -92,10 +92,10 @@ def test_areas_of_a_letter_scanned_in_colour(tmp_path: Path) -> None:
 
 @needs_backend
 def test_nothing_but_the_table_on_a_laboratory_report(tmp_path: Path) -> None:
-    """A scanned laboratory report: its table, and no picture, stamp or handwriting that
-    could take a value out of the text."""
+    """A scanned laboratory report, upright as optdoc hands it on: its table, and no
+    picture, stamp or handwriting that could take a value out of the text."""
     pdf, _ = lab_report(tmp_path, 3)
-    project = Project.open(scan(pdf, tmp_path / "scan.pdf", noise=0.01, rotation=1.0))
+    project = Project.open(scan(pdf, tmp_path / "scan.pdf", noise=0.01))
     try:
         assert [r.kind for r in project.regions(0)] == ["table"]
     finally:

@@ -19,7 +19,7 @@ from itertools import groupby
 
 import pymupdf
 
-from optdoc.pagetext import PageText
+from ocrdoc.pagetext import PageText
 
 _WORD = re.compile(r"\S+")
 _MARKUP = re.compile(r"^[#*_>|`~=-]+$")

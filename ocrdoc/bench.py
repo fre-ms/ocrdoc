@@ -1,6 +1,7 @@
-"""The test bench: how well optdoc reads documents whose content is known.
+"""The test bench: how well ocrdoc reads documents whose content is known.
 
-A bench folder holds documents (photos, scans, PDFs) and, next to each, a truth file
+A bench folder holds PDFs (scans, pages optdoc prepared from photos) and, next to each, a
+truth file
 ``<stem>.truth.txt``: one line per item worth checking, written as it is printed
 ("Kalium 5,8 mmol/l 3,5 - 5,1 H"); empty lines and lines starting with ``#`` are
 skipped.  :func:`bench` reads every document and compares each truth line with the
@@ -22,7 +23,7 @@ Per document and in total:
 
 Where a document also has ``<stem>.cells.json`` (a list of rows, each the list of its
 non-empty cells as printed) and the extra "tables" is installed, its tables are scored
-as well (:mod:`optdoc.tables`; the searchable PDF is written into a hidden folder inside
+as well (:mod:`ocrdoc.tables`; the searchable PDF is written into a hidden folder inside
 the bench folder for that, and removed, so that nothing of a document leaves it):
 
 - ``table_rows``: rows in the cells file; ``table_rows_cut_right``: rows that come out
@@ -40,14 +41,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from optdoc import ocr as ocrlib
-from optdoc.errors import OptdocError
-from optdoc.loading import HEIC_SUFFIXES, IMAGE_SUFFIXES
-from optdoc.pagetext import PageText
+from ocrdoc import ocr as ocrlib
+from ocrdoc.errors import OcrdocError
+from ocrdoc.filters import Filters
+from ocrdoc.pagetext import PageText
 
 TRUTH_SUFFIX = ".truth.txt"
 CELLS_SUFFIX = ".cells.json"
-DOCUMENT_SUFFIXES = IMAGE_SUFFIXES | HEIC_SUFFIXES | {".pdf"}
+DOCUMENT_SUFFIXES = {".pdf"}
 _NUMBER = re.compile(r"[<>≤≥]?\d+(?:[.,]\d+)?")
 
 
@@ -222,15 +223,15 @@ def _cell_texts(reading: Any) -> list[list[list[str]]]:
     return [[[c.text for c in row] for row in t.rows] for page in found.values() for t in page]
 
 
-def _read_lines(path: Path, reader: str, clean_up: bool, cells: Path | None = None,
+def _read_lines(path: Path, reader: str, cells: Path | None = None,
                 ) -> tuple[list[str], Score, dict[str, Any]]:
     """The reading lines of a document, its confidence figures and a summary, and its
     table figures when ``cells`` names a cells file."""
-    from optdoc import tables
-    from optdoc.reading import read
+    from ocrdoc import tables
+    from ocrdoc.reading import read
 
     # a page is written for a moment only into the document's own folder, never elsewhere
-    reading = read(path, reader=reader, clean_up=clean_up, scratch=path.parent)
+    reading = read(path, reader=reader, scratch=path.parent)
     try:
         lines: list[str] = []
         confidence = Score()
@@ -239,8 +240,10 @@ def _read_lines(path: Path, reader: str, clean_up: bool, cells: Path | None = No
             if page.ocr:
                 confidence.confidence_sum += sum(page.text.confidences)
                 confidence.confidence_words += len(page.text.confidences)
+        filtered = sum(1 for page in (reading.config or {}).get("pages", [])
+                       if page.get("filters") and Filters.from_dict(page["filters"]).active)
         summary = {"pages": len(reading.pages), "ocr_pages": sum(p.ocr for p in reading.pages),
-                   "cleaned_up": len(reading.plan)}
+                   "filtered": filtered}
         if cells is not None and tables.available():
             truth = json.loads(cells.read_text(encoding="utf-8"))
             found = score_tables(truth, _cell_texts(reading))
@@ -263,7 +266,7 @@ def documents_in(folder: Path) -> list[tuple[Path, Path]]:
     return pairs
 
 
-def bench(folder: str | Path, readers: list[str] | None = None, clean_up: bool = True) -> Result:
+def bench(folder: str | Path, readers: list[str] | None = None) -> Result:
     """Read every document of ``folder`` that has a truth file with each of ``readers``
     (default: every installed engine) and score it."""
     pairs = documents_in(Path(folder))
@@ -279,9 +282,9 @@ def bench(folder: str | Path, readers: list[str] | None = None, clean_up: bool =
             cells = path.with_name(path.stem + CELLS_SUFFIX)
             try:
                 lines, confidence, summary = _read_lines(
-                    path, reader, clean_up, cells if cells.is_file() else None)
+                    path, reader, cells if cells.is_file() else None)
             except Exception as error:  # the message may quote a path; only its kind leaves
-                entry["error"] = (error.kind if isinstance(error, OptdocError)
+                entry["error"] = (error.kind if isinstance(error, OcrdocError)
                                   else type(error).__name__)
                 result.documents.append(entry)
                 continue

@@ -2,7 +2,7 @@
 selected, moved and resized, their kind changed; a table's grid lines added, dragged
 and taken away, its cells merged and split again.
 
-The view knows the regions (:mod:`optdoc.layout`) and the tool in use, and says when
+The view knows the regions (:mod:`ocrdoc.layout`) and the tool in use, and says when
 the person has changed them (``regions_changed``); the panel around it keeps them in
 the project.  Shift or Option/Alt and drag, or the middle button, moves the view, as in
 every view of the window; Ctrl/Cmd and the wheel zooms.
@@ -24,8 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from optdoc import layout
-from optdoc.layout import Region
+from ocrdoc import layout
+from ocrdoc.layout import Region
 
 # FineReader's colours where it has the kind
 COLOURS = {

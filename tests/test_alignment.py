@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pymupdf
 
-from optdoc.alignment import (
+from ocrdoc.alignment import (
     _after_anchor,
     _between_neighbours,
     _Run,
@@ -13,7 +13,7 @@ from optdoc.alignment import (
     _word_spans,
     text_layer_from_correction,
 )
-from optdoc.ocr import page_text_from_words
+from ocrdoc.ocr import page_text_from_words
 from tests.test_structure import _line
 
 

@@ -1,14 +1,14 @@
-"""The window of ``optdoc edit``: the pages on the left, clean-up, areas and text as
+"""The window of ``ocrdoc edit``: the pages on the left, filters, areas and text as
 three tabs, in FineReader's order, and three ways out.
 
 - **Apply** reads every page not read yet (with progress) and closes; the command line
-  then writes the result, exactly as ``prepare`` would from the same configuration.
+  then writes the result, exactly as ``run`` would from the same configuration.
 - **Save and continue later** closes; the command line writes the configuration, from
   which ``edit --config`` goes on.
 - **Cancel** (or closing the window) closes; nothing is written.
 
-One piece of work runs at a time, off the window's thread; while it runs, the clean-up
-cannot change the page under it.
+One piece of work runs at a time, off the window's thread; while it runs, the filters and
+areas cannot change the page under it.
 """
 
 from __future__ import annotations
@@ -32,12 +32,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from optdoc.errors import describe_error
-from optdoc.gui.cleanup_panel import CleanupPanel
-from optdoc.gui.regions_panel import RegionsPanel
-from optdoc.gui.text_panel import TextPanel
-from optdoc.gui.words import Words
-from optdoc.project import Project
+from ocrdoc.errors import describe_error
+from ocrdoc.gui.filters_panel import FiltersPanel
+from ocrdoc.gui.regions_panel import RegionsPanel
+from ocrdoc.gui.text_panel import TextPanel
+from ocrdoc.gui.words import Words
+from ocrdoc.project import Project
 
 
 class EditWindow(QMainWindow):
@@ -56,12 +56,12 @@ class EditWindow(QMainWindow):
         self.changed = False
         self._worker: Worker | None = None
         self._pending: tuple[Callable[[], object], Callable[[], None]] | None = None
-        self.setWindowTitle(self.w("title", name=project.source.name))
+        self.setWindowTitle(self.w("title", tool="ocrdoc", name=project.source.name))
         self.resize(1280, 820)
-        self.cleanup = CleanupPanel(project, words)
-        self.cleanup.changed.connect(self._plan_changed)
+        self.filters = FiltersPanel(project, words)
+        self.filters.changed.connect(self._worked)
         self.areas = RegionsPanel(project, words, self._find_regions)
-        self.areas.changed.connect(self._plan_changed)
+        self.areas.changed.connect(self._worked)
         self.text = TextPanel(project, words, self._read_page)
         central = QWidget()
         v = QVBoxLayout(central)
@@ -70,7 +70,7 @@ class EditWindow(QMainWindow):
         self.pages.setMaximumWidth(160)
         splitter.addWidget(self.pages)
         self.tabs = QTabWidget()
-        self.tabs.addTab(self.cleanup, self.w("tab_cleanup"))
+        self.tabs.addTab(self.filters, self.w("tab_filters"))
         self.tabs.addTab(self.areas, self.w("tab_regions"))
         self.tabs.addTab(self.text, self.w("tab_text"))
         splitter.addWidget(self.tabs)
@@ -83,8 +83,8 @@ class EditWindow(QMainWindow):
         self.pages.currentRowChanged.connect(self._show)
         self.tabs.currentChanged.connect(lambda _i: self._show(self.pages.currentRow()))
         self.progressed.connect(self._progress)
-        if not any(project.cleanable(n) for n in range(len(project.pages))):
-            self.tabs.setCurrentWidget(self.text)  # a born-digital PDF: nothing to clean up
+        if not any(project.needs_ocr(n) for n in range(len(project.pages))):
+            self.tabs.setCurrentWidget(self.areas)  # a born-digital PDF: nothing to filter
         self._show(0)  # the row is 0 already, so no signal shows it
 
     def _build_bar(self) -> QHBoxLayout:
@@ -128,7 +128,7 @@ class EditWindow(QMainWindow):
         elif self.tabs.currentWidget() is self.areas:
             self.areas.show_page(n)
         else:
-            self.cleanup.show_page(n)
+            self.filters.show_page(n)
 
     def _mark_pages(self) -> None:
         """Mark the pages whose text was corrected."""
@@ -138,8 +138,8 @@ class EditWindow(QMainWindow):
             if item is not None:
                 item.setText(self.w(key, number=n + 1))
 
-    def _plan_changed(self, _n: int) -> None:
-        """A plan or the areas of a page changed."""
+    def _worked(self, _n: int) -> None:
+        """The filters or the areas of a page changed."""
         self.changed = True
 
     # -- work off the window's thread ----------------------------------------------------------
@@ -148,7 +148,7 @@ class EditWindow(QMainWindow):
         if self._worker is not None:
             self._pending = (job, then)
             return
-        self.cleanup.setEnabled(False)
+        self.filters.setEnabled(False)
         self.areas.setEnabled(False)
         for button in (self.later_button, self.apply_button):
             button.setEnabled(False)
@@ -173,7 +173,7 @@ class EditWindow(QMainWindow):
     def _release(self) -> None:
         """Nothing runs any more; start what waited."""
         self._worker = None
-        self.cleanup.setEnabled(True)
+        self.filters.setEnabled(True)
         self.areas.setEnabled(True)
         for button in (self.later_button, self.apply_button):
             button.setEnabled(True)
@@ -249,10 +249,10 @@ class EditWindow(QMainWindow):
 
     # -- the self-test of the standalone program ------------------------------------------------
     def self_test(self) -> None:
-        """Go through the window once without a person: show the clean-up of the first
+        """Go through the window once without a person: show the filters of the first
         page, its areas, turn to its text, and apply."""
-        self.tabs.setCurrentWidget(self.cleanup)
-        self.cleanup.show_page(0)
+        self.tabs.setCurrentWidget(self.filters)
+        self.filters.show_page(0)
         self.tabs.setCurrentWidget(self.areas)
         self.tabs.setCurrentWidget(self.text)
         self.text.commit()

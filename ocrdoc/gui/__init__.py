@@ -1,6 +1,6 @@
-"""The window of optdoc: clean up a document by eye and correct the recognised text
-(``optdoc edit``).  Needs PySide6 (the extra "gui").  The panels are widgets of their own,
-so that an application can put them into its own window."""
+"""The window of ocrdoc: check the filters and areas of a document by eye and correct the
+recognised text (``ocrdoc edit``).  Needs PySide6 (the extra "gui").  The panels are
+widgets of their own, so that an application can put them into its own window."""
 
 from __future__ import annotations
 

@@ -1,21 +1,21 @@
-"""Open the window on a project and wait until it closes (``optdoc edit``)."""
+"""Open the window on a project and wait until it closes (``ocrdoc edit``)."""
 
 from __future__ import annotations
 
 from PySide6.QtCore import QTimer
 from PySide6.QtWidgets import QApplication
 
-from optdoc.gui.window import EditWindow
-from optdoc.gui.words import Words
-from optdoc.project import Project
+from ocrdoc.gui.window import EditWindow
+from ocrdoc.gui.words import Words
+from ocrdoc.project import Project
 
 
 def edit(project: Project, language: str | None = None, self_test: bool = False) -> str:
     """Show the window on ``project``, brought to the front (it is opened from another
     program), and return how it closed: "applied", "saved" or "cancelled".  With
     ``self_test`` it goes through once by itself (the check of the standalone program)."""
-    app = QApplication.instance() or QApplication(["optdoc"])
-    app.setApplicationName("optdoc")
+    app = QApplication.instance() or QApplication(["ocrdoc"])
+    app.setApplicationName("ocrdoc")
     window = EditWindow(project, Words(language), synchronous=self_test)
     window.show()
     window.raise_()

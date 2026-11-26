@@ -1,273 +1,38 @@
 # Changelog
 
-## 0.7.0 (unreleased)
+## 0.1.0 (unreleased)
 
-The first stage of dividing optdoc into tools of one step each (`docs/family-design.md`):
-what every tool of reprodoc shares is now doccor's, a library of its own. optdoc behaves
-as before; its interface (2) and formats are unchanged.
+ocrdoc comes out of optdoc 0.6.0 with the history of its modules: the recognition, while optdoc
+keeps the preparation of the page (`docs/family-design.md` in optdoc says why and how). What
+changed in the move:
 
-### Changed
+- **The pages stay as they came.** ocrdoc reads a PDF and lays its text layer over the input's
+  pages; it never cleans them up. Photos and images go through optdoc first (error `not-pdf`).
+- **Filters for OCR** (`ocrdoc.filters`): upscaling, letter mode, taking coloured ink and ruled
+  lines away, black and white, done to ocrdoc's own rendering of a page and never to the
+  document; suggested per page (upscaling below 150 dpi, colour taken away above 0.3 % of colour),
+  chosen by a person in the window's first tab, kept in the configuration document with who chose
+  them. Tesseract's second pass over ruled tables uses them.
+- **The configuration document** `<stem>.ocrdoc.json`, format `ocrdoc-config` version 1: the input
+  by its SHA-256 and every page's size and frame, the settings, and per page the filters, the
+  words OCR read, the areas and the correction. Byte for byte the same result from the same input
+  and document, as in optdoc.
+- **The chain.** The PDF carries the configuration documents of the steps before (`optdoc.json`)
+  as the input had them, with ocrdoc's own (`ocrdoc.json`); its file identifier is made from all of
+  them. When the input changed but a page's frame (recorded by optdoc) did not, what a person
+  decided on the page stays and what a machine found is found again; pages whose frame changed are
+  named (`dropped`). An input without frames must be the very file (`config-mismatch`).
+- **The reading** is format `ocrdoc-reading` version 1: optdoc's `optdoc-reading` 1 without the
+  clean-up plan and without the input's file name; `input` names it by its SHA-256.
+- **The command line** has the verbs of every tool of docrepro: `about` (optdoc's `readers`,
+  fields `readers`, `filters`, `tables`, `barcodes`, `window`), `run` (optdoc's `prepare`), `edit`,
+  and `bench` (PDFs only). Interface 1 (`docs/interface.md`); the answer has `filtered`, `dropped`
+  and `carried`.
+- **Settings** from the environment are `OCRDOC_OCR`, `OCRDOC_TESSERACT`,
+  `OCRDOC_TESSERACT_LANGUAGES`.
+- The window's words name the tool by a placeholder, so that the words of several tools can live
+  in one program; the kinds of error two tools share are worded alike.
+- No standalone program of its own: one program with every tool inside comes with docrepro.
 
-- optdoc depends on **doccor**: the configuration document's mechanics (its bytes, the
-  SHA-256 of the input, reading it from a file or a PDF, embedding it without dates, the
-  PDF's identifier), the common kinds of error and their wording, the command line's
-  manners (one JSON answer, usage errors as answers, standard error for its own lines),
-  the network lock and ONNX Runtime's telemetry switch, and the window's page view,
-  worker and words. optdoc registers its own kinds of error and words there.
-
-### Removed
-
-- `optdoc.offline` (now `doccor.offline`), `optdoc.gui.view` and `optdoc.gui.worker` (now
-  in `doccor.gui`).
-
-## 0.6.0 (2026-11-26)
-
-Areas, as in FineReader: a page is divided into regions, found automatically and corrected by
-hand, and a table's grid can be set. Tables, barcodes (read as well), pictures, stamps and
-handwriting are found automatically; the reading order of text areas and layout models as an
-optional download are to come. Interface 2 and the formats of the configuration and the reading
-(version 1) gain fields; nothing is taken away.
-
-### Added
-
-- **Areas** (`optdoc.layout`): text, table, image, barcode, handwriting, stamp, ignore, each with
-  its box in points of the cleaned page and who set it ("auto" or "person"); a table with its grid
-  (inner column and row lines, merged cells) and operations on it (add, move and remove a line,
-  merge and split cells, move and resize with the grid). What lies in no area is text. Words in
-  pictures, barcodes and "ignore" areas stay out of the text, the text layer and the reading;
-  handwriting and stamps are read and marked.
-- **The window's tab "Areas"** between clean-up and text: the areas in their colours, numbered in
-  reading order; a drawing tool per kind; select, move, resize, change the kind, delete; for a
-  table add a column or row line, drag one, take one away, merge cells by dragging over them and
-  split them by a click; find the areas again.
-- The configuration keeps every page's areas (`layout`, with `by`) and the setting `cells`; the
-  reading lists every page's `regions` and says of each table who set it (`by`).
-- **Barcodes, pictures, stamps and handwriting found** (`optdoc.areas`), on the page where it lies
-  once cleaned up but in its own colours: barcodes with zxing-cpp (the extra `barcodes`), read as
-  well (format and content in the reading; a line barcode's box grown over its bars); stamps by one
-  strong colour with lines of letters; pictures by filled or many-toned ink with hardly a word
-  read in it (a picture keeps its words out of the text, so it needs a clear case); handwriting
-  by ink of the height of writing in which OCR read hardly a word. Measured on six invented
-  letters (`bench/area_letters.py`), born digital / scanned in colour / in grey / photographed:
-  pictures 12 / 12 / 10 / 12 of 12, barcodes 17 / 17 / 17 / 15 of 17 with their content, stamps
-  6 / 5 / 0 / 5 of 6, handwriting 11 / 11 / 9 / 10 of 12, wrong ones at most 2 pictures and 1
-  handwriting (on the photos); on laboratory reports nothing besides their tables, the numbers
-  read unchanged. `--no-areas` (`Options.areas`) finds none of them; `readers` says whether
-  barcodes can be read (`barcodes`).
-- `Project.regions`, `set_regions`, `find_regions`, `find_tables`, `forget_regions`;
-  `read(..., cells=..., scratch=...)`; `cleanup.geometry_only`.
-
-### Changed
-
-- The tables of a page come from its table areas: every word goes into the cell of the grid its
-  middle lies in. Camelot finds the tables of a page once, on that page in memory, and they are
-  stored with the configuration, so that a reproduction does not run Camelot again. Measured on
-  12 photographed and 12 born-digital invented reports: the same cells as before, row for row
-  (211 of 216 photographed rows cut right, 196 read exactly; every born-digital row).
-- The Markdown writes a table with a grid from its cells.
-- `--no-cells` is a setting of the configuration; beside `--config` it leaves out the tables
-  found before, but not those a person set.
-- A table a person changed counts as certain (`confidence` 1).
-- **The suggestion straightens a tilt from 0.3 degrees** (was 1.2). Invented laboratory reports
-  scanned half a degree to a degree askew lost the grid of their tables (0 to 36 of 108 rows cut
-  right); straightened, 101 to 108, while the numbers read stayed within a few of 306 either way.
-
-### Fixed
-
-- Tables on scans: Camelot's table of texts can have fewer rows or columns than its grid of
-  cells, and optdoc stopped at that (since 0.3.0), so that many a scanned page had no tables.
-- Camelot is given a page only as a file in a folder of optdoc's own inside the results folder,
-  removed at once: given a PDF in memory, it writes it to the temporary folder.
-
-### Removed
-
-- `output.write(..., cells=...)`: the tables are made with the reading (`Options.cells`).
-
-## 0.5.0 (2026-11-23)
-
-Photos taken at a slant. Interface 2 and the configuration's format are unchanged, but a
-configuration made by 0.4.0 gives a different PDF for a photographed page: the sheet now has its
-true proportions.
-
-Measured on 30 invented laboratory reports photographed by a simulated phone camera (26 mm),
-six each on a dark desk at a slight and at a strong slant, on a light grey table, on a wooden
-desk, and with the foot or head of the sheet cut off by the photo: the sheet is found in 29
-(0.4.0: 21); OCR then reads 1525 of 1530 numbers right (0.4.0: 1450; unwarped with the true
-corners: 1522) and 91 % of the table rows exactly (0.4.0: 61 %). Compared were Apple Vision's
-document and rectangle detection (1499 numbers, 66 % of rows), DocAligner, UVDoc (PaddleOCR's,
-which bent the tables) and page-dewarp (which needs a page full of text); none did better.
-
-### Changed
-
-- **True proportions.** An unwarped sheet takes its width and height from the perspective of its
-  corners (Zhang and He, 2007), with the focal length from the corners where they tell it and a
-  phone's (26 mm) where they do not, snapped to A4, A5, Letter or Legal within 3 %. Before, it took
-  the longer of each pair of sides: 8 to 43 % off at a slant; now within 1 %, and within about 5 %
-  for a phone between 24 and 28 mm with corners a few pixels off (before snapping).
-- **The sheet is found more often.** Besides the edge search, a second search fits straight lines
-  to the visible edges of the paper, so that a corner may lie outside the photo; where a whole edge
-  of the sheet is outside, it is reconstructed from the other three and the camera, and what the
-  photo did not show stays white. The white bars of a photo placed on paper are no part of the
-  picture.
-- **Desk or paper** is told by a narrow ring just outside the outline. Before, everything outside
-  counted, so that a desk around the sheet made a table on it look like the sheet. The difference
-  asked for is now 15 grey levels (was 30): a light grey table lay 34 to 37 below the paper, and
-  paper around a frame is brighter than inside it, by 16 to 31. The corner search itself rejects an
-  outline with paper around it, so `--photo` no longer cuts a page to a table.
-
-### Added
-
-- The window shows the sheet's four corners on the page before, to be dragged; where optdoc found
-  none, dashed at the page's corners, as a start.
-- `cleanup.sheet_aspect` (proportions from four corners) and `cleanup.turn_points`.
-
-### Fixed
-
-- A quarter turn in the window left the sheet's corners where they were on the unturned page, so
-  that unwarping then cut out the wrong area; they turn with the page now.
-- What lies outside the photo after unwarping is white; it repeated the pixels at the edge.
-
-## 0.4.0 (2026-11-23)
-
-Interface 2: the configuration takes the place of the plan (see `docs/interface.md`, "From
-interface 1").
-
-### Added
-
-- **The window** (`optdoc edit`, `optdoc.gui`, extra `gui`, PySide6), moved here from PseudonyMed's
-  pages "Aufbereiten" and "Texterkennung", in English and German (`--language`). Clean up each page
-  before and after (every step switchable with its strength, rotation, areas erased, the suggestion
-  restored, a page left as it came, copied to every page, orientation detected) and check the text
-  beside the page, words read with little confidence marked. It starts with optdoc's suggestions, so
-  that *Apply* at once gives what `prepare` gives. *Apply* writes the four files, *Save and continue
-  later* the configuration alone, *Cancel* nothing (error `cancelled`). No settings of its own, nothing
-  outside `--out`, no network; checked under `sandbox-exec` without network and with empty home and
-  temporary folders. `--self-test` goes through it without a person (the build uses it).
-- **The configuration** (`<stem>.optdoc.json`, format `optdoc-config` version 1, `optdoc.project`):
-  the settings, every page's clean-up, the words OCR read and the person's corrections, the file it
-  belongs to by its SHA-256; no paths, no times. It is also embedded in the PDF (`optdoc.json`).
-  `prepare --config` and `edit --config` take it, or the PDF that carries it. **The same file and the
-  same configuration give the same four files, byte for byte**: the words are stored, so OCR does not
-  run again, and the PDF carries no time and an identifier made from the configuration.
-- **Corrected text** in the text layer, the reading and the Markdown: the corrected text is laid on the
-  boxes OCR found; words left as read keep their confidence; each OCR word in the reading says `by`:
-  `"ocr"` or `"person"`. The answer lists the `corrected` pages.
-- `optdoc.project.Project`, the work on one document for programs: open, change plans and corrections,
-  read page by page, save the configuration, build the result.
-- Kinds of error `bad-config` (reasons `json`, `format`, `page`, `field`), `config-mismatch`,
-  `not-ocr`, `cancelled`, `no-gui`; `readers` says whether the window can open (`window`).
-- `alignment.align_correction`: `text_layer_from_correction`, and which words a person wrote.
-- `ocr.recognise_words`, `cleanup.cleaned_image` and `cleanup.put_page_image`: the steps of
-  `recognise_page` and `replace_pages`, one at a time.
-
-### Changed
-
-- `reading.read` works through a project; its result carries the configuration (`Reading.config`).
-- `alignment.text_layer_from_correction` keeps the engine's confidence for a word left as it was
-  read; before, every word of a corrected text had confidence 1.
-- `CleanupPlan.from_dict` refuses a broken plan as `bad-config` (was `bad-plan`).
-- The standalone program carries PySide6 (Qt Widgets only): 161.6 MB as one file, 506.4 MB as a folder.
-
-### Removed
-
-- `<stem>.plan.json`, `prepare --plan`, the answer field `plan` and the kind of error `bad-plan`: the
-  configuration holds the plans.
-- `reading.ocr_page`; use `Project.read`.
-
-## 0.3.0 (2026-11-23)
-
-### Added
-
-- **Tables with their cells** (`optdoc.tables`, extra `tables`): optdoc finds the tables of every page
-  with Camelot (hybrid) in the PDF it has just written, on scanned and photographed pages in its own
-  text layer, and puts them into the reading: per page `tables`, each with its box, Camelot's confidence
-  and its rows of cells (text and box). A table Camelot finds twice gives every row once. On invented
-  laboratory reports in three layouts: 216 of 216 rows in born-digital PDFs cut and read right; 211 of
-  216 in photos cut right, 193 read exactly. Compared were Camelot, img2table, pdfplumber, RapidTable,
-  Tabula and PyMuPDF; Tabula would need Java and read photos worse.
-- `prepare --no-cells`; the answer of `prepare` counts the tables, `readers` says whether they can be
-  found (`tables`).
-- `optdoc bench` scores tables where a document has `<name>.cells.json`; `bench/lab_reports.py` writes
-  one per report.
-
-### Changed
-
-- The text layer leaves the gap between two cells of a table open (an ordinary space, then the next
-  word where it is printed) and stretches the space only within a cell. Programs that find tables by
-  the gaps between text see the columns: Camelot cut 49 of 54 photographed rows right, none before.
-  PDFKit still reads every row as one line.
-- A gap between OCR words wider than the words are high is a cell boundary (a tab in the text). The
-  former rule, far wider than the page's usual gap, found none in two of three laboratory layouts;
-  their Markdown now has tables.
-- The build of the standalone program switches off ONNX Runtime's telemetry for PyInstaller as well,
-  which loads the library to collect it.
-
-### Fixed
-
-- The PDF is let go once its tables are found: Camelot's objects held it open until a garbage
-  collection, and Windows cannot delete an open file.
-
-## 0.2.1 (2026-11-23)
-
-### Fixed
-
-- Standard error holds optdoc's own lines only, as the interface says: on Linux, ONNX Runtime wrote a
-  warning there (about PCI buses, in colour) between the progress lines. For the time of a command,
-  what libraries write to standard error is discarded; the progress lines and the usage line get
-  through.
-
-## 0.2.0 (2026-11-23)
-
-### Added
-
-- **The command line is an interface** ([docs/interface.md](docs/interface.md), interface 1): every
-  command answers with one JSON object on standard output, carrying `interface` and `made_with`; a
-  failure as well, with a fixed kind (`missing`, `unsupported`, `unreadable`, `encrypted`, `no-reader`,
-  `bad-plan` …), its details and its message in English and German, and exit status 2.
-- `prepare --progress`: a line `{"page": n, "of": m}` on standard error before each page.
-- `prepare --photo` and `--scan`; without them a photographed page is told from a scanned one by the
-  page itself, inside a PDF too (photos bound into one), so that the photos of a bound PDF are found
-  and unwarped. A frame or a ruled table on a scan is never taken for the sheet.
-- Pages turned by `/Rotate` are opened upright without touching their pictures; the PDF optdoc writes
-  has no turned pages, and the boxes of the reading are those of the page as shown.
-- `optdoc.errors`: `OptdocError` (`kind`, `details`) and `describe_error(error, "de")`, the same kinds and
-  wording for programs that use optdoc as a library.
-- `optdoc.offline`: the command line refuses every attempt to reach the network, and switches off the
-  telemetry of ONNX Runtime, which on macOS wrote a device identifier and facts about the computer into
-  a queue for sending to Microsoft (in `~/Library/Application Support/Microsoft/DeveloperTools`).
-- The standalone program for an application to ship beside it (a Tauri sidecar):
-  `packaging/build.py` builds `optdoc-<target>` with PyInstaller (or a folder with `--onedir`), lists
-  the packages inside and their licences, and tries the program out; [docs/sidecar.md](docs/sidecar.md).
-- `optdoc/py.typed`: type checkers read optdoc's annotations.
-
-### Changed
-
-- **The text layer is written line by line** (`optdoc.textlayer`): one text object per OCR line, words
-  at their printed width, real spaces stretched over the gaps, a font of its own that writes every
-  character as read ("≤", "↑", where the standard font knew only Windows-1252). A row of a table comes
-  out as one line in PDFKit and MuPDF, and words are no longer glued together.
-- OCR words are grouped into lines from left to right, each word against the last one of its line, so
-  that a slightly tilted table row stays one line.
-- Tesseract gets the page on standard input; no image of a page is written to a temporary file.
-- `readers` no longer loads the engines to list them.
-- `SettingsLike` declares read-only properties, so that an object with properties fits it.
-- `--paper image` placed an image on A4; it keeps the image's own size again.
-
-### Removed
-
-- `ValueError`, `NotImplementedError` and the free-text `OCRError` messages of optdoc's modules: every
-  error is an `OptdocError` (an `OCRError` for the engines), worded by its kind. A caller that matched
-  the old English messages uses `error.kind` and `describe_error` instead.
-- Error messages on standard error; the answer on standard output says it.
-- `reading.is_photo` and `reading.plan_for`: the suggestion tells photos by each page
-  (`reading.suggestion_for(page, photo=None)`).
-- `output.invisible_text_layer`: `optdoc.textlayer.add_font` and `write_page`.
-
-## 0.1.0 (2026-11-22)
-
-English identifiers throughout (`docs/renames-0.1.0.md`); the test bench (`optdoc bench`) and invented
-laboratory reports to print and photograph.
-
-## 0.0.1 (2026-11-22)
-
-PseudonyMed's document layer as a program of its own: loading, clean-up, OCR, structure, searchable PDF.
+The history of the code before the move is in optdoc's changelog up to 0.6.0:
+https://github.com/fre-ms/optdoc/blob/v0.6.0/CHANGELOG.md

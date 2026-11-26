@@ -16,7 +16,7 @@ it:
   new line at a jump);
 - between two cells of a table (a tab in the page text) stands an ordinary space and
   the gap stays open, so that a program that finds tables by the gaps between text
-  (Camelot, Tabula, :mod:`optdoc.tables`) sees the columns;
+  (Camelot, Tabula, :mod:`ocrdoc.tables`) sees the columns;
 - the font has a single glyph, a box over the em, which every character of the Basic
   Multilingual Plane is drawn with, and a ``ToUnicode`` map gives each its own code,
   so that "≤", "↑" or "µ" are written as they were read (the standard fonts know only
@@ -42,7 +42,7 @@ from statistics import median
 
 import pymupdf
 
-from optdoc.pagetext import PageText
+from ocrdoc.pagetext import PageText
 
 FONT_NAME = "OptdocInvisible"
 RESOURCE = "FOptdocOCR"  # the name of the font in a page's resources
@@ -194,7 +194,7 @@ def add_font(doc: pymupdf.Document) -> int:
 class _Word:
     """A word of the page text as it is written: its text, its box in page points, and
     whether a cell of a table (or a column) ends with it: the page text has a tab after
-    it (:func:`optdoc.ocr.page_text_from_words`)."""
+    it (:func:`ocrdoc.ocr.page_text_from_words`)."""
 
     text: str
     box: pymupdf.Rect

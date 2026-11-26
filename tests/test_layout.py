@@ -1,7 +1,7 @@
 """The regions of a page and the grid of a table: changed as the window changes them,
 kept in the configuration, and what they make of the result: cells from the grid,
-words in regions that are not read left out, a person's regions kept or dropped as
-the clean-up moves the page or not."""
+words in regions that are not read left out.  (A person's regions and the filters, and
+a changed input: tests/test_project.py.)"""
 
 from __future__ import annotations
 
@@ -11,11 +11,11 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from optdoc import cleanup, layout, output, tables
-from optdoc import ocr as ocrlib
-from optdoc.errors import OptdocError
-from optdoc.layout import Region
-from optdoc.project import SUFFIX, Options, Project, load_config
+from ocrdoc import layout, output, tables
+from ocrdoc import ocr as ocrlib
+from ocrdoc.errors import OcrdocError
+from ocrdoc.layout import Region
+from ocrdoc.project import SUFFIX, Options, Project, load_config
 from tests.synthetic import lab_report, scan
 
 needs_backend = pytest.mark.skipif(not ocrlib.available_backends(),
@@ -83,7 +83,7 @@ def test_regions_in_the_configuration() -> None:
                     "merged": [[0, 0, 1, 1], [1, 1, 1, 1]]},
                    {"kind": "image", "box": [0, 0, 100, 50], "rows": [25]},
                    {"box": [0, 0, 9, 9]}):
-        with pytest.raises(OptdocError) as caught:
+        with pytest.raises(OcrdocError) as caught:
             Region.from_dict(broken)
         assert (caught.value.kind, caught.value.details) == ("bad-config", {"reason": "field"})
 
@@ -168,29 +168,8 @@ def test_a_region_not_read_leaves_the_text(tmp_path: Path, report: Path) -> None
     assert "Ramipril" not in page["text"] and page["regions"][0]["kind"] == "ignore"
 
 
-@needs_backend
-def test_a_persons_regions_and_the_clean_up(tmp_path: Path, report: Path) -> None:
-    """A person's regions stay when the clean-up changes only how the page looks (more
-    contrast); when it moves the page (a quarter turn), they no longer fit and go."""
-    source = scan(report, tmp_path / "scan.pdf")
-    project = Project.open(source)
-    try:
-        project.set_regions(0, [Region("stamp", (300, 600, 500, 700), "person")])
-        plan = project.plan(0) or cleanup.CleanupPlan()
-        plan.contrast = True
-        project.set_plan(0, plan)
-        assert project.regions_by_person(0) and project.regions(0)[0].kind == "stamp"
-        plan.rotation = 90
-        project.set_plan(0, plan)
-        assert not project.regions_by_person(0)
-        assert all(r.kind == "table" for r in project.regions(0))
-        project.save(tmp_path / f"scan{SUFFIX}")
-    finally:
-        project.close()
-
-
 def test_a_persons_grid_is_certain() -> None:
-    """A table optdoc found has the finder's confidence; once a person changed its grid,
+    """A table ocrdoc found has the finder's confidence; once a person changed its grid,
     the table is theirs and certain."""
     found = Region("table", (0, 0, 300, 60), "auto", [100, 200], [20, 40], [], 0.7)
     assert layout.table_of(found, []).confidence == 0.7
@@ -201,7 +180,7 @@ def test_a_persons_grid_is_certain() -> None:
 @needs_tables
 def test_finding_tables_writes_nothing_elsewhere(tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
                                                ) -> None:
-    """Camelot writes a PDF it is given in memory to the temporary folder; optdoc gives it
+    """Camelot writes a PDF it is given in memory to the temporary folder; ocrdoc gives it
     a path in the results folder, for a moment.  Nothing touches the temporary folder,
     not even briefly, and nothing is left in the results folder but the results."""
     import tempfile

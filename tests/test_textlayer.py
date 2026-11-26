@@ -13,11 +13,11 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from optdoc import ocr as ocrlib
-from optdoc import textlayer
-from optdoc.ocr import OCRWord, page_text_from_words
-from optdoc.reading import read
-from tests.synthetic import lab_report, photograph
+from ocrdoc import ocr as ocrlib
+from ocrdoc import textlayer
+from ocrdoc.ocr import OCRWord, page_text_from_words
+from ocrdoc.reading import read
+from tests.synthetic import lab_report, scan
 
 ROWS = [  # (text, x0, y0) of every word: a heading, two rows of a laboratory table, a sentence
     [("Befund", 60, 60)],
@@ -157,17 +157,17 @@ def _pdfkit_lines(tmp_path: Path, pdf: Path) -> list[str]:
 @pytest.mark.skipif(sys.platform != "darwin" or shutil.which("swiftc") is None
                     or not ocrlib.available_backends(), reason="PDFKit is macOS's")
 def test_pdfkit_reads_each_row_as_one_line(tmp_path: Path) -> None:
-    """A photographed laboratory report: PDFKit gives every row of its table (name, value,
-    unit, range, flag) as one line of the PDF optdoc writes, as medorello's laboratory
+    """A scanned laboratory report: PDFKit gives every row of its table (name, value,
+    unit, range, flag) as one line of the PDF ocrdoc writes, as medorello's laboratory
     reader needs it.  The row counts when PDFKit's line holds its name and its last
     item and is nearly as long as the printed row (the reading itself may differ by a
     character or a space)."""
     import difflib
 
     pdf, truth = lab_report(tmp_path, 1)
-    reading = read(photograph(pdf, tmp_path / "foto.jpg"))
+    reading = read(scan(pdf, tmp_path / "foto.pdf", dpi=150, noise=0.005, rotation=0.6))
     try:
-        from optdoc import output
+        from ocrdoc import output
 
         paths = output.write(reading, tmp_path / "out")
     finally:

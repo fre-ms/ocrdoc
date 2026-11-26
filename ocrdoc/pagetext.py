@@ -15,7 +15,7 @@ from typing import Any
 
 import pymupdf
 
-from optdoc.errors import OptdocError
+from ocrdoc.errors import OcrdocError
 
 Box = tuple[float, float, float, float]
 
@@ -146,7 +146,7 @@ class PageText:
     def from_dict(cls, d: dict[str, Any]) -> PageText:
         """Rebuild a page from :meth:`as_dict`; missing lists default to empty, and a
         character list that does not match the text length raises an
-        :class:`~optdoc.errors.OptdocError` of kind "page-text"."""
+        :class:`~ocrdoc.errors.OcrdocError` of kind "page-text"."""
         page_text = cls(number=int(d["number"]), width=float(d["width"]), height=float(d["height"]),
                     text=str(d["text"]), source=str(d.get("source", "text")))
         page_text.boxes = _boxes_from(d.get("boxes", []))
@@ -157,7 +157,7 @@ class PageText:
         page_text.confidences = [float(k) for k in d.get("confidences", [])]
         page_text.word_spans = [(int(a), int(b)) for a, b in d.get("word_spans", [])]
         if not page_text._char_lists_match():
-            raise OptdocError("page-text", page=page_text.number + 1)
+            raise OcrdocError("page-text", page=page_text.number + 1)
         return page_text
 
     def _char_lists_match(self) -> bool:

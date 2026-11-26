@@ -1,7 +1,7 @@
-"""The areas of one page, found by optdoc and corrected by hand: text, tables with their
+"""The areas of one page, found by ocrdoc and corrected by hand: text, tables with their
 grids, pictures, barcodes, handwriting, stamps, and what is not to be read.
 
-The panel works on a :class:`~optdoc.project.Project`: it shows the regions of a page
+The panel works on a :class:`~ocrdoc.project.Project`: it shows the regions of a page
 (:meth:`Project.regions`, found on the page once it is read, which may take seconds and
 runs off the window's thread through ``prepare_page``), and every change a person makes
 goes into the project at once (:meth:`Project.set_regions`).
@@ -27,10 +27,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from optdoc import layout
-from optdoc.gui.regions_view import COLOURS, TOOLS, RegionsView
-from optdoc.gui.words import Words
-from optdoc.project import Project
+from ocrdoc import layout
+from ocrdoc.gui.regions_view import COLOURS, TOOLS, RegionsView
+from ocrdoc.gui.words import Words
+from ocrdoc.project import Project
 
 
 class RegionsPanel(QWidget):
@@ -153,7 +153,7 @@ class RegionsPanel(QWidget):
             return
         regions = self.view.regions
         key = "regions_person" if self.project.regions_by_person(n) else "regions_auto"
-        lines = [self.w(key, count=len(regions))]
+        lines = [self.w(key, tool="ocrdoc", count=len(regions))]
         k = self.view.selected
         if k is not None and regions[k].kind == "table":
             rows, columns = regions[k].size
@@ -205,7 +205,7 @@ class RegionsPanel(QWidget):
         self.tool_buttons[name].setChecked(True)
 
     def find_again(self) -> None:
-        """Forget the areas of the page (a person's too) and let optdoc find them."""
+        """Forget the areas of the page (a person's too) and let ocrdoc find them."""
         if self.number is None:
             return
         self.project.forget_regions(self.number)
