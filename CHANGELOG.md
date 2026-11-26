@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0 (unreleased)
+## 0.1.0 (2026-11-26)
 
 ocrdoc comes out of optdoc 0.6.0 with the history of its modules: the recognition, while optdoc
 keeps the preparation of the page (`docs/family-design.md` in optdoc says why and how). What
