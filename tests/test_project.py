@@ -21,7 +21,7 @@ from tests.synthetic import scan
 
 needs_backend = pytest.mark.skipif(not ocrlib.available_backends(),
                                    reason="no OCR engine installed")
-FILES = ("pdf", "reading", "markdown", "config")
+FILES = ("document", "reading", "markdown", "config")
 
 
 def _write(project: Project, folder: Path) -> dict[str, bytes]:
@@ -90,7 +90,7 @@ def test_the_pages_stay_and_the_chain_is_carried(tmp_path: Path, report: Path) -
             reading.close()
     finally:
         project.close()
-    with pymupdf.open(source) as before, pymupdf.open(paths["pdf"]) as after:
+    with pymupdf.open(source) as before, pymupdf.open(paths["document"]) as after:
         assert sorted(after.embfile_names()) == ["ocrdoc.json", "optdoc.json"]
         assert after.embfile_get("optdoc.json") == before.embfile_get("optdoc.json")
         for n in range(len(before)):
@@ -129,7 +129,7 @@ def test_resume_and_correct(tmp_path: Path, report: Path) -> None:
             reading.close()
     finally:
         again.close()
-    with pymupdf.open(paths["pdf"]) as doc:
+    with pymupdf.open(paths["document"]) as doc:
         assert "Ramiprill" in doc[0].get_text() and doc[0].search_for("Ramiprill")
     words = json.loads(paths["reading"].read_text(encoding="utf-8"))["pages"][0]["words"]
     by = {w["text"].strip(","): w["by"] for w in words}

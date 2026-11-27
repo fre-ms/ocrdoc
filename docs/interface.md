@@ -1,6 +1,6 @@
 # ocrdoc's command line as an interface
 
-**Interface 1**, since ocrdoc 0.1.0 (this description: ocrdoc 0.2.0). This is what a program may
+**Interface 2**, since ocrdoc 0.3.0. This is what a program may
 rely on when it calls ocrdoc, whatever language it is written in: a records app, a pseudonymiser,
 a script, docrepro.
 
@@ -10,7 +10,13 @@ interface, new fields, new options and new kinds of error may come; a caller ign
 does not know and treats an unknown kind of error like any other (its message says what
 happened). Releases are tagged; pin a tag, not a branch.
 
-**Added within interface 1 (ocrdoc 0.2.0):** the way models come as an optional download, the same
+**From interface 1:** the answer names the PDF with its text layer `document`, no longer `pdf`, as
+every tool of docrepro does from now on: a document need not be a PDF (no step is to force a file
+type), and a field called `pdf` would then point at a picture. Nothing else changed; ocrdoc still
+reads and writes PDFs.
+
+**Added within interface 1 (ocrdoc 0.2.0), and kept:** the way models come as an optional
+download, the same
 as in every tool of docrepro: the commands `models list` and `models fetch`, the option `--models`,
 `models` in the answer of `about`, and the kinds of error `unknown-model`, `model-unreachable` and
 `model-checksum`. ocrdoc lists no model yet (below).
@@ -42,13 +48,13 @@ Every answer has these two fields:
 
 | field | example | meaning |
 |---|---|---|
-| `interface` | `1` | the version of this description |
-| `made_with` | `"ocrdoc 0.2.0"` | the program and its version, for the record of what made a file |
+| `interface` | `2` | the version of this description |
+| `made_with` | `"ocrdoc 0.3.0"` | the program and its version, for the record of what made a file |
 
 ## `about`: what this installation can do
 
 ```json
-{"interface": 1, "made_with": "ocrdoc 0.2.0", "version": "0.2.0",
+{"interface": 2, "made_with": "ocrdoc 0.3.0", "version": "0.3.0",
  "readers": ["rapidocr", "tesseract"], "filters": true, "tables": true, "barcodes": true,
  "window": true, "models": []}
 ```
@@ -91,8 +97,8 @@ a `usage` error. `--no-cells` beside it leaves out the tables found before, but 
 The answer:
 
 ```json
-{"interface": 1, "made_with": "ocrdoc 0.2.0",
- "pdf": "<folder>/<stem>.pdf", "reading": "<folder>/<stem>.reading.json",
+{"interface": 2, "made_with": "ocrdoc 0.3.0",
+ "document": "<folder>/<stem>.pdf", "reading": "<folder>/<stem>.reading.json",
  "markdown": "<folder>/<stem>.md", "config": "<folder>/<stem>.ocrdoc.json",
  "pages": 2, "ocr_pages": [1, 2], "pages_without_text": [], "filtered": [1, 2],
  "corrected": [], "dropped": [], "reader": "rapidocr", "tables": 1,
@@ -222,7 +228,7 @@ caller waits until it is closed. It keeps no settings of its own and writes noth
 ## The configuration document: `ocrdoc-config`, version 1
 
 ```json
-{"format": "ocrdoc-config", "version": 1, "made_with": "ocrdoc 0.2.0",
+{"format": "ocrdoc-config", "version": 1, "made_with": "ocrdoc 0.3.0",
  "input": {"sha256": "…", "bytes": 245678, "suffix": ".pdf",
            "pages": [{"width": 595.276, "height": 841.89, "frame": "…"}]},
  "options": {"reader": "auto", "languages": null, "tables": true, "structure": true,
@@ -274,7 +280,7 @@ document names (`config-mismatch` otherwise).
 ## Failures
 
 ```json
-{"interface": 1, "made_with": "ocrdoc 0.2.0", "error": "not-pdf", "details": {},
+{"interface": 2, "made_with": "ocrdoc 0.3.0", "error": "not-pdf", "details": {},
  "message": {"en": "ocrdoc reads PDFs; optdoc makes one of a photo or an image first.",
              "de": "ocrdoc liest PDFs; aus einem Foto oder Bild macht optdoc zuerst eines."}}
 ```
@@ -311,7 +317,7 @@ The same kinds and wording are there for programs that use ocrdoc as a Python li
 ## The reading: `ocrdoc-reading`, version 1
 
 ```json
-{"format": "ocrdoc-reading", "version": 1, "made_with": "ocrdoc 0.2.0",
+{"format": "ocrdoc-reading", "version": 1, "made_with": "ocrdoc 0.3.0",
  "reader": "rapidocr", "input": {"sha256": "…"},
  "pages": [{"page": 1, "width": 595.28, "height": 841.89, "source": "ocr",
             "text": "Kalium\t5,8\tmmol/l\t3,5 - 5,1\tH\n…", "markdown": "…",

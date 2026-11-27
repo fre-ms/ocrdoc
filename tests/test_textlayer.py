@@ -172,7 +172,7 @@ def test_pdfkit_reads_each_row_as_one_line(tmp_path: Path) -> None:
         paths = output.write(reading, tmp_path / "out")
     finally:
         reading.close()
-    lines = ["".join(z.split()) for z in _pdfkit_lines(tmp_path, paths["pdf"])]
+    lines = ["".join(z.split()) for z in _pdfkit_lines(tmp_path, paths["document"])]
     whole = 0
     for row in truth:
         want = "".join(row.split())

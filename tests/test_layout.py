@@ -136,7 +136,7 @@ def test_tables_found_and_set_by_hand(tmp_path: Path) -> None:
             reading.close()
     finally:
         again.close()
-    for key in ("pdf", "reading", "markdown", "config"):
+    for key in ("document", "reading", "markdown", "config"):
         assert first[key].read_bytes() == second[key].read_bytes(), key
 
 
@@ -162,7 +162,7 @@ def test_a_region_not_read_leaves_the_text(tmp_path: Path, report: Path) -> None
             reading.close()
     finally:
         project.close()
-    with pymupdf.open(paths["pdf"]) as doc:
+    with pymupdf.open(paths["document"]) as doc:
         assert "Ramipril" not in doc[0].get_text() and "Diagnosen" in doc[0].get_text()
     page = json.loads(paths["reading"].read_text(encoding="utf-8"))["pages"][0]
     assert "Ramipril" not in page["text"] and page["regions"][0]["kind"] == "ignore"

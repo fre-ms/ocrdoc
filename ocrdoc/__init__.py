@@ -29,4 +29,4 @@ What every tool of docrepro shares (configuration documents, the command line's 
 no network, the window's building blocks) is doccor's (:mod:`doccor`).
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

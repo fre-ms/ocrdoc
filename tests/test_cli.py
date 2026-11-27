@@ -126,14 +126,14 @@ def test_answer_names_the_results(tmp_path: Path, report: Path,
     status, answer, err = _answer(capsys, ["run", str(report), "--out",
                                            str(tmp_path / "out")])
     assert status == 0 and err == ""
-    assert set(answer) == HEAD | {"pdf", "reading", "markdown", "config", "pages",
+    assert set(answer) == HEAD | {"document", "reading", "markdown", "config", "pages",
                                   "ocr_pages", "pages_without_text", "filtered", "corrected",
                                   "dropped", "reader", "tables", "carried"}
     assert answer["tables"] == (0 if tables.available() else None)  # a letter has none
     assert answer["pages"] == 2 and answer["ocr_pages"] == [] and answer["filtered"] == []
     assert answer["dropped"] == [] and answer["carried"] == []
     assert all(Path(answer[k]).parent == tmp_path / "out"
-               for k in ("pdf", "reading", "markdown", "config"))
+               for k in ("document", "reading", "markdown", "config"))
     reading = json.loads(Path(answer["reading"]).read_text(encoding="utf-8"))
     assert reading["made_with"] == answer["made_with"]
 
@@ -222,7 +222,7 @@ def test_run_on_the_command_line(tmp_path: Path, report: Path) -> None:
     assert run.returncode == 0, run.stdout
     answer = json.loads(run.stdout)
     assert answer["pages"] == 2 and answer["ocr_pages"] == [1, 2]
-    assert answer["filtered"] == [1, 2] and Path(answer["pdf"]).is_file()  # upscaled
+    assert answer["filtered"] == [1, 2] and Path(answer["document"]).is_file()  # upscaled
     progress = [json.loads(z) for z in run.stderr.splitlines()]
     assert progress == [{"page": 1, "of": 2}, {"page": 2, "of": 2}]
     assert sorted(p.name for p in target.iterdir()) == [
@@ -234,7 +234,7 @@ def test_run_on_the_command_line(tmp_path: Path, report: Path) -> None:
                    answer["config"]])
     again = json.loads(second.stdout)
     assert again["filtered"] == [1, 2]
-    for key in ("pdf", "reading", "markdown", "config"):
+    for key in ("document", "reading", "markdown", "config"):
         assert Path(again[key]).read_bytes() == Path(answer[key]).read_bytes(), key
 
 
@@ -260,5 +260,5 @@ def test_edit_goes_through_and_leaves_nothing_behind(tmp_path: Path, report: Pat
     for name, folder in elsewhere.items():
         assert not any(folder.rglob("*")), (name, list(folder.rglob("*")))
     prepared = json.loads(_run(["run", str(source), "--out", str(tmp_path / "p")]).stdout)
-    for key in ("pdf", "reading", "markdown", "config"):
+    for key in ("document", "reading", "markdown", "config"):
         assert Path(answer[key]).read_bytes() == Path(prepared[key]).read_bytes(), key

@@ -1,6 +1,6 @@
 [project]
 name = "ocrdoc"
-version = "0.2.0"
+version = "0.3.0"
 description = "Recognises what is on the pages of a PDF: areas, OCR with word boxes, tables, barcodes; the pages stay as they are, the result is reproducible."
 readme = "README.md"
 requires-python = ">=3.12"

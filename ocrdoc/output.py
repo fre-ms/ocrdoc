@@ -144,23 +144,24 @@ def searchable_pdf(reading: Reading) -> bytes:
 def write(reading: Reading, folder: str | Path, stem: str | None = None) -> dict[str, Path]:
     """Write ``<stem>.pdf``, ``<stem>.reading.json``, ``<stem>.md`` and the
     configuration ``<stem>.ocrdoc.json`` (where the reading has one) into ``folder``
-    (created when missing); returns the paths.  Nothing is written anywhere else.  Raises
+    (created when missing); returns the paths by kind ("document": the PDF with its text
+    layer; "reading", "markdown", "config").  Nothing is written anywhere else.  Raises
     :class:`~ocrdoc.errors.OcrdocError`: "same-as-source" when the PDF would replace the
     document that was read, "unwritable" when the folder cannot take the files."""
     target = Path(folder)
     stem = stem or reading.source.stem
     paths = {
-        "pdf": target / f"{stem}.pdf",
+        "document": target / f"{stem}.pdf",
         "reading": target / f"{stem}.reading.json",
         "markdown": target / f"{stem}.md",
         "config": target / f"{stem}{SUFFIX}",
     }
-    if paths["pdf"].resolve() == reading.source.resolve():
+    if paths["document"].resolve() == reading.source.resolve():
         raise OcrdocError("same-as-source")
     pdf = searchable_pdf(reading)
     try:
         target.mkdir(parents=True, exist_ok=True)
-        paths["pdf"].write_bytes(pdf)
+        paths["document"].write_bytes(pdf)
     except OSError as e:
         raise OcrdocError("unwritable") from e
     contents = {

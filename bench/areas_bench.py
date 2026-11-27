@@ -77,7 +77,7 @@ def _source(pdf: Path, variant: str, k: int, work: Path) -> Path | None:
     try:
         prepared = preparation.build()
         try:
-            return output.write(prepared, work / f"{pdf.stem}-prepared")["pdf"]
+            return output.write(prepared, work / f"{pdf.stem}-prepared")["document"]
         finally:
             prepared.close()
     finally:

@@ -30,7 +30,7 @@ def test_scan_becomes_searchable(tmp_path: Path, report: Path) -> None:
         ocr_page_text = reading.pages[0].text
     finally:
         reading.close()
-    with pymupdf.open(paths["pdf"]) as d:
+    with pymupdf.open(paths["document"]) as d:
         assert "Ramipril" in d[0].get_text() and "Kontrolle" in d[1].get_text()
         found = d[0].search_for("Diagnosen")
         assert d.metadata["producer"].startswith("ocrdoc ")
@@ -62,7 +62,7 @@ def test_text_layer_stays_as_it_is(tmp_path: Path, report: Path) -> None:
     data = json.loads(paths["reading"].read_text(encoding="utf-8"))
     assert [s["source"] for s in data["pages"]] == ["text", "text"]
     assert all("confidence" not in w for w in data["pages"][0]["words"])
-    with pymupdf.open(paths["pdf"]) as d:
+    with pymupdf.open(paths["document"]) as d:
         assert d[0].get_text().count("Ramipril") == 1  # nothing laid over a text layer
 
 

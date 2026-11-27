@@ -22,7 +22,7 @@ What they share (configuration documents, the command line's manners, no network
 blocks) is [doccor](https://github.com/fre-ms/doccor)'s. ocrdoc works on any PDF, optdoc's or another
 program's, and knows nothing of the applications that use it.
 
-**Status: pre-alpha (0.2.0).** The code comes out of optdoc 0.6.0, with its history, where it read the
+**Status: pre-alpha (0.3.0).** The code comes out of optdoc 0.6.0, with its history, where it read the
 pages optdoc had prepared. `CHANGELOG.md` lists what changed in the move.
 
 ## Every step can be reproduced and resumed

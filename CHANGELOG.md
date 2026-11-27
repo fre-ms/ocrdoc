@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.0 (2026-11-27)
+
+Interface 2: one field renamed, in every tool of docrepro at once.
+
+### Changed
+
+- **The answer names the PDF with its text layer `document`**, no longer `pdf` (`run`, and `edit`
+  on Apply); `ocrdoc.output.write` returns it under that key. No step of docrepro is to force a
+  file type, so a document need not be a PDF, and a field called `pdf` would then point at a
+  picture. ocrdoc itself still reads and writes PDFs; that it reads a picture and lays its
+  reading beside it is to come. Callers read `document` where they read `pdf`.
+
 ## 0.2.0 (2026-11-26)
 
 The way models come as an optional download, a bench for the finders of areas, and barcodes

@@ -32,7 +32,7 @@ from ocrdoc.errors import OcrdocError
 from ocrdoc.models import CATALOGUE
 from ocrdoc.project import SUFFIX, Options, Project, load_config
 
-INTERFACE = 1  # the version of docs/interface.md the answers follow
+INTERFACE = 2  # the version of docs/interface.md the answers follow
 TOOL = "ocrdoc"
 
 
