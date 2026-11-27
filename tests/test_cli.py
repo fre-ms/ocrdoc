@@ -48,7 +48,8 @@ def test_about(capsys: pytest.CaptureFixture[str]) -> None:
     status, answer, _ = _answer(capsys, ["about"])
     assert status == 0
     assert set(answer) == HEAD | {"version", "readers", "filters", "tables", "barcodes",
-                                  "window", "models"}
+                                  "window", "heic", "models"}
+    assert isinstance(answer["heic"], bool)
     assert isinstance(answer["models"], list)
     assert answer["interface"] == INTERFACE and answer["version"] == __version__
     assert answer["made_with"] == f"ocrdoc {__version__}"
@@ -81,11 +82,14 @@ def test_failures_by_kind_without_paths(tmp_path: Path, report: Path,
     damaged.write_bytes(b"%PDF-1.7\nnot really\n")
     photo = folder / f"{PATIENT}.jpg"
     photo.write_bytes(b"\xff\xd8\xff\xe0 not really")
+    word = folder / f"{PATIENT}.docx"
+    word.write_bytes(b"PK")
     good = folder / f"{PATIENT}-gut.pdf"
     good.write_bytes(report.read_bytes())
     cases = {
         "missing": ["run", str(folder / "fehlt.pdf")],
-        "not-pdf": ["run", str(photo)],
+        "unreadable:picture": ["run", str(photo)],  # named a JPEG, but none
+        "unsupported": ["run", str(word)],
         "unreadable": ["run", str(damaged)],
         "encrypted": ["run", str(_encrypted(folder / f"{PATIENT}-zu.pdf"))],
         "usage": ["run", str(good), "--unknown", str(folder)],

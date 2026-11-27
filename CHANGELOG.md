@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.4.0 (2026-11-27)
+
+A picture stays a picture. docrepro forces no file type; ocrdoc now reads a picture as well as a
+PDF and hands it on as it came. Interface 3; `ocrdoc-reading` version 2.
+
+### Added
+
+- **ocrdoc reads pictures**: JPEG, PNG, TIFF, HEIC and HEIF, WebP, BMP, GIF, PNM. Upright, as the
+  picture's EXIF orientation says; every picture of a file (a TIFF of several pages) is a page.
+  Areas, text, tables and barcodes are found as on a page of a PDF, and the window works on a
+  picture as on a PDF.
+- **The picture is handed on as it came, byte for byte**, under the ending it came with. A picture
+  has no place for text, so nothing is put into it: the reading, the Markdown and the
+  configuration document lie beside it. The same picture and document give the same files again.
+- **The reading gives a picture's boxes in its own pixels** (upright, to a tenth of a pixel), and
+  says so: every page has a `unit`, `"px"` for a picture and `"pt"` for a page of a PDF. A
+  program that draws on the picture or cuts a value out of it takes the boxes as they are.
+- **The frames of the step before are read from optdoc's document beside a picture**
+  (`<stem>.optdoc.json`; a PDF carries it inside): when a person changes a picture in optdoc and
+  its geometry stays, what they decided in ocrdoc stays, as with a PDF.
+- `heic` in the answer of `about`: whether HEIC and HEIF photos can be opened (pillow-heif, which
+  the extra "ocr" brings). Pillow itself is a dependency now, so every other picture opens in any
+  installation.
+- `ocrdoc bench` scores pictures as well as PDFs.
+
+### Changed
+
+- **`ocrdoc-reading` is version 2**: `unit` per page (above). A page of a PDF reads as before.
+- A picture is looked at as a page whose long side is that of A4, the page typdoc binds it into
+  (medRDS 9.5) and optdoc looks at: the same picture is read the same whether ocrdoc is handed
+  the picture or typdoc's PDF of it. The configuration document holds its boxes in points of that
+  page, as it does for a PDF.
+- `ocrdoc.loading.open_document` opens a PDF or a picture.
+
+### Removed
+
+- The kind of error `not-pdf`: a picture is read now. A type ocrdoc cannot open is `unsupported`
+  (with `suffix`), worded as optdoc and typdoc word it.
+- `ocrdoc.project.open_pdf` (`ocrdoc.loading.open_document` in its place).
+
 ## 0.3.0 (2026-11-27)
 
 Interface 2: one field renamed, in every tool of docrepro at once.

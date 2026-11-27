@@ -1,7 +1,12 @@
-"""What a reading leaves behind: a searchable PDF, the reading as JSON, the text as
-Markdown, and the configuration that makes it again (:mod:`ocrdoc.project`).
+"""What a reading leaves behind: the document, the reading as JSON, the text as Markdown,
+and the configuration that makes it again (:mod:`ocrdoc.project`).
 
-The PDF is the input with its pages as they came; the OCR text is laid invisibly over
+**A picture stays a picture.**  It has no place for text, so the reading and the Markdown
+lie beside it, and the picture is handed on as it came, byte for byte.  Its boxes are in
+its own pixels (upright), and the reading says so (``unit``).
+
+A PDF becomes a searchable PDF: the input with its pages as they came; the OCR text is
+laid invisibly over
 the place where it is printed, line by line (:mod:`ocrdoc.textlayer`), so that a reader
 can search and select the text of a scan like that of a born-digital document, and a
 program that takes the text out gets a printed row as one line.  The JSON names every
@@ -32,7 +37,7 @@ from ocrdoc.reading import PageReading, Reading
 from ocrdoc.tables import Table
 
 FORMAT = "ocrdoc-reading"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2  # 2: every page says the unit of its boxes (points, or a picture's pixels)
 
 
 def _word_box(page_text: PageText, a: int, b: int) -> pymupdf.Rect | None:
@@ -82,10 +87,33 @@ def _regions(s: PageReading) -> list[dict[str, Any]]:
     return regions
 
 
-def _page_as_dict(s: PageReading, tables: list[Table] | None) -> dict[str, Any]:
-    """One page of the reading; ``tables`` None when they were not looked for."""
+def _in_pixels(value: Any, factor: float) -> Any:
+    """What a page of the reading says, with every box in pixels: ``factor`` pixels to a
+    point."""
+    if isinstance(value, dict):
+        return {key: ([round(v * factor, 1) for v in item]
+                      if key == "box" and isinstance(item, list) else _in_pixels(item, factor))
+                for key, item in value.items()}
+    if isinstance(value, list):
+        return [_in_pixels(item, factor) for item in value]
+    return value
+
+
+def _page_as_dict(s: PageReading, tables: list[Table] | None,
+                  pixels: tuple[int, int] | None = None) -> dict[str, Any]:
+    """One page of the reading; ``tables`` None when they were not looked for.  For a
+    picture (``pixels``: its size) the boxes are in its own pixels."""
+    page = _page_in_points(s, tables)
+    if pixels is None:
+        return page
+    scaled: dict[str, Any] = _in_pixels(page, pixels[0] / s.text.width)
+    return {**scaled, "unit": "px", "width": pixels[0], "height": pixels[1]}
+
+
+def _page_in_points(s: PageReading, tables: list[Table] | None) -> dict[str, Any]:
     return {
         "page": s.number + 1,
+        "unit": "pt",
         "width": round(s.text.width, 2),
         "height": round(s.text.height, 2),
         "source": "ocr" if s.ocr else "text",
@@ -107,7 +135,8 @@ def reading_as_dict(reading: Reading) -> dict[str, Any]:
         "reader": reading.reader,
         "input": {"sha256": named.get("sha256")},
         "pages": [_page_as_dict(s, None if reading.tables is None
-                                else reading.tables.get(s.number, []))
+                                else reading.tables.get(s.number, []),
+                                None if reading.pixels is None else reading.pixels[s.number])
                   for s in reading.pages],
     }
 
@@ -142,26 +171,28 @@ def searchable_pdf(reading: Reading) -> bytes:
 
 
 def write(reading: Reading, folder: str | Path, stem: str | None = None) -> dict[str, Path]:
-    """Write ``<stem>.pdf``, ``<stem>.reading.json``, ``<stem>.md`` and the
-    configuration ``<stem>.ocrdoc.json`` (where the reading has one) into ``folder``
-    (created when missing); returns the paths by kind ("document": the PDF with its text
-    layer; "reading", "markdown", "config").  Nothing is written anywhere else.  Raises
-    :class:`~ocrdoc.errors.OcrdocError`: "same-as-source" when the PDF would replace the
-    document that was read, "unwritable" when the folder cannot take the files."""
+    """Write the document (``<stem>.pdf`` with its text layer; a picture as it came, under
+    the ending it came with), ``<stem>.reading.json``, ``<stem>.md`` and the configuration
+    ``<stem>.ocrdoc.json`` (where the reading has one) into ``folder`` (created when
+    missing); returns the paths by kind ("document", "reading", "markdown", "config").
+    Nothing is written anywhere else.  Raises :class:`~ocrdoc.errors.OcrdocError`:
+    "same-as-source" when the document would replace the one that was read, "unwritable"
+    when the folder cannot take the files."""
     target = Path(folder)
     stem = stem or reading.source.stem
+    picture = reading.pixels is not None
     paths = {
-        "document": target / f"{stem}.pdf",
+        "document": target / f"{stem}{reading.source.suffix if picture else '.pdf'}",
         "reading": target / f"{stem}.reading.json",
         "markdown": target / f"{stem}.md",
         "config": target / f"{stem}{SUFFIX}",
     }
     if paths["document"].resolve() == reading.source.resolve():
         raise OcrdocError("same-as-source")
-    pdf = searchable_pdf(reading)
-    try:
+    try:  # a picture is handed on as it came, byte for byte
+        document = reading.source.read_bytes() if picture else searchable_pdf(reading)
         target.mkdir(parents=True, exist_ok=True)
-        paths["document"].write_bytes(pdf)
+        paths["document"].write_bytes(document)
     except OSError as e:
         raise OcrdocError("unwritable") from e
     contents = {

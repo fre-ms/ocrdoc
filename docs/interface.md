@@ -1,6 +1,6 @@
 # ocrdoc's command line as an interface
 
-**Interface 2**, since ocrdoc 0.3.0. This is what a program may
+**Interface 3**, since ocrdoc 0.4.0. This is what a program may
 rely on when it calls ocrdoc, whatever language it is written in: a records app, a pseudonymiser,
 a script, docrepro.
 
@@ -10,10 +10,15 @@ interface, new fields, new options and new kinds of error may come; a caller ign
 does not know and treats an unknown kind of error like any other (its message says what
 happened). Releases are tagged; pin a tag, not a branch.
 
-**From interface 1:** the answer names the PDF with its text layer `document`, no longer `pdf`, as
-every tool of docrepro does from now on: a document need not be a PDF (no step is to force a file
-type), and a field called `pdf` would then point at a picture. Nothing else changed; ocrdoc still
-reads and writes PDFs.
+**From interface 2:** ocrdoc reads a picture as well as a PDF, and **a picture stays a picture**:
+no step of docrepro forces a file type. The picture is handed on as it came, and its reading lies
+beside it. What a caller of interface 2 must know: the kind of error `not-pdf` is gone
+(`unsupported` names a type ocrdoc cannot open); `document` in the answer points at a picture
+where a picture was read; the reading is `ocrdoc-reading` version 2, whose pages say the `unit`
+of their boxes (points for a PDF, as before; a picture's own pixels). New in `about`: `heic`.
+
+**From interface 1 (ocrdoc 0.3.0):** the answer names the document `document`, no longer `pdf`, as
+every tool of docrepro does.
 
 **Added within interface 1 (ocrdoc 0.2.0), and kept:** the way models come as an optional
 download, the same
@@ -21,17 +26,17 @@ as in every tool of docrepro: the commands `models list` and `models fetch`, the
 `models` in the answer of `about`, and the kinds of error `unknown-model`, `model-unreachable` and
 `model-checksum`. ocrdoc lists no model yet (below).
 
-ocrdoc does one step of docrepro: it **recognises** what is on the pages of a PDF and leaves the
-pages as they are. Making a photo or a scan faithful (upright, unwarped, evenly lit) is optdoc's
-step before it; the two came out of optdoc 0.6.0, which did both (its `prepare` is optdoc's and
-ocrdoc's `run` one after the other).
+ocrdoc does one step of docrepro: it **recognises** what is on the pages of a PDF, or on a
+picture, and leaves the document as it is. Making a photo or a scan faithful (upright, unwarped,
+evenly lit) is optdoc's step before it, and binding pictures into a PDF typdoc's; neither is
+needed for ocrdoc to read a file.
 
 ## Calling
 
 ```
 ocrdoc about
-ocrdoc run  <file.pdf> --out <folder> [options]
-ocrdoc edit <file.pdf> --out <folder> [options] [--language de|en]
+ocrdoc run  <file> --out <folder> [options]
+ocrdoc edit <file> --out <folder> [options] [--language de|en]
 ocrdoc bench <folder> [--reader rapidocr|tesseract]
 ocrdoc models list [--models <folder>]
 ocrdoc models fetch <name> --to <folder> [--progress]
@@ -48,15 +53,15 @@ Every answer has these two fields:
 
 | field | example | meaning |
 |---|---|---|
-| `interface` | `2` | the version of this description |
-| `made_with` | `"ocrdoc 0.3.0"` | the program and its version, for the record of what made a file |
+| `interface` | `3` | the version of this description |
+| `made_with` | `"ocrdoc 0.4.0"` | the program and its version, for the record of what made a file |
 
 ## `about`: what this installation can do
 
 ```json
-{"interface": 2, "made_with": "ocrdoc 0.3.0", "version": "0.3.0",
+{"interface": 3, "made_with": "ocrdoc 0.4.0", "version": "0.4.0",
  "readers": ["rapidocr", "tesseract"], "filters": true, "tables": true, "barcodes": true,
- "window": true, "models": []}
+ "window": true, "heic": true, "models": []}
 ```
 
 `readers` lists the OCR engines found, in order of preference (`tesseract` is listed where the
@@ -64,27 +69,29 @@ system has it). `filters` says whether the filters for OCR and the finders of pi
 handwriting are there (OpenCV and NumPy, the extra "ocr"), `tables` whether tables are found with
 their cells (Camelot, the extra "tables"), `barcodes` whether barcodes are found and read
 (zxing-cpp, the extra "barcodes"), `window` whether `edit` can open its window (PySide6, the extra
-"gui"), `models` the models ocrdoc can use (none yet; see `models` below). The engines are not
-loaded for this, so the answer is quick.
+"gui"), `heic` whether HEIC and HEIF photos can be opened (pillow-heif, the extra "ocr"; every
+other type of picture opens in any installation), `models` the models ocrdoc can use (none yet;
+see `models` below). The engines are not loaded for this, so the answer is quick.
 
-## `run`: recognise a PDF
+## `run`: recognise a document
 
 ```
-ocrdoc run <file.pdf> --out <folder> [--config <file.ocrdoc.json | file.pdf>]
+ocrdoc run <file> --out <folder> [--config <file.ocrdoc.json | file.pdf>]
     [--reader auto|rapidocr|tesseract|none] [--languages <packs>]
     [--no-tables] [--no-structure] [--no-cells] [--no-areas] [--models <folder>] [--progress]
 ```
 
-`<file>` is a PDF: one optdoc prepared, a scan, any PDF. A photo or an image goes through optdoc
-first (`not-pdf` otherwise). ocrdoc never changes the file. It writes four files into `<folder>`
-(made when missing) and **nothing anywhere else**: no copies, no caches, no images of pages in the
-temporary folder (Camelot reads a page from a file, which ocrdoc writes into a hidden folder in
-`<folder>` for a moment and removes at once). Without `--out` the folder is `<file>.ocrdoc` beside
-the file.
+`<file>` is a PDF (one optdoc prepared, a scan, any PDF) or a picture: JPEG, PNG, TIFF, HEIC or
+HEIF, WebP, BMP, GIF, PNM (`unsupported` for anything else). ocrdoc never changes the file. It
+writes four files into `<folder>` (made when missing) and **nothing anywhere else**: no copies, no
+caches, no images of pages in the temporary folder (Camelot reads a page from a file, which ocrdoc
+writes into a hidden folder in `<folder>` for a moment and removes at once). Without `--out` the
+folder is `<file>.ocrdoc` beside the file.
 
 | file | what it is |
 |---|---|
-| `<stem>.pdf` | the input with its pages as they came, an invisible text layer on every page read by OCR, and the configuration documents of every step inside |
+| `<stem>.pdf` | for a PDF: the input with its pages as they came, an invisible text layer on every page read by OCR, and the configuration documents of every step inside |
+| `<stem><ending>` | for a picture, in its place: **the picture as it came, byte for byte**, under the ending it came with. A picture has no place for text, so nothing is put into it; what ocrdoc read lies in the three files beside it |
 | `<stem>.reading.json` | the reading (format `ocrdoc-reading`, below) |
 | `<stem>.md` | the text as Markdown, a heading per page |
 | `<stem>.ocrdoc.json` | the configuration document (format `ocrdoc-config`, below): from it and the file, the same four files again |
@@ -97,7 +104,7 @@ a `usage` error. `--no-cells` beside it leaves out the tables found before, but 
 The answer:
 
 ```json
-{"interface": 2, "made_with": "ocrdoc 0.3.0",
+{"interface": 3, "made_with": "ocrdoc 0.4.0",
  "document": "<folder>/<stem>.pdf", "reading": "<folder>/<stem>.reading.json",
  "markdown": "<folder>/<stem>.md", "config": "<folder>/<stem>.ocrdoc.json",
  "pages": 2, "ocr_pages": [1, 2], "pages_without_text": [], "filtered": [1, 2],
@@ -112,7 +119,15 @@ person corrected (in the window; carried by the configuration), `dropped` are pa
 decisions no longer fit a changed input (below), `reader` is the engine used (`null` without one),
 `tables` the number of tables with their cells (`null` when they were neither looked for,
 `--no-cells` or the extra "tables" not installed, nor set by a person), `carried` the
-configuration documents of the steps before that the input carried and the PDF carries on.
+configuration documents of the steps before that the input carried and the PDF carries on (none
+for a picture, which carries nothing: there they lie beside it). `document` is the PDF, or the
+picture where a picture was read.
+
+**A picture is read upright**, as its EXIF orientation says, and a file with several pictures (a
+TIFF of several pages) has a page for each. To read it, ocrdoc looks at a picture as a page whose
+long side is that of A4 (842 points): the page typdoc binds it into (the standard medRDS, 9.5) and
+the page optdoc looks at, so that the same picture is read the same whether ocrdoc is handed the
+picture or typdoc's PDF of it.
 
 **Filters for OCR.** What helps OCR read a page often harms the document: grey instead of colour,
 a stamp taken away. So ocrdoc filters only its own rendering of a page, never the page itself:
@@ -191,7 +206,7 @@ in grey.
 ## `edit`: the window
 
 ```
-ocrdoc edit <file.pdf> --out <folder> [--config <file.ocrdoc.json | file.pdf>]
+ocrdoc edit <file> --out <folder> [--config <file.ocrdoc.json | file.pdf>]
     [--language de|en] [the settings of run] [--no-cells] [--progress]
 ```
 
@@ -209,8 +224,8 @@ tabs, in FineReader's order:
   them again; "find again" brings ocrdoc's areas back.
 - **Check the text:** the page as OCR read it, words read with little confidence marked yellow, a
   click on a word selects it in the text; the text beside it, to be corrected by hand. A
-  correction goes into the PDF's text layer, the reading (as words `"by": "person"`) and the
-  Markdown; the words keep the boxes of the page.
+  correction goes into the reading (as words `"by": "person"`), the Markdown and, in a PDF, its
+  text layer; the words keep the boxes of the page.
 
 The window closes in one of three ways:
 
@@ -228,7 +243,7 @@ caller waits until it is closed. It keeps no settings of its own and writes noth
 ## The configuration document: `ocrdoc-config`, version 1
 
 ```json
-{"format": "ocrdoc-config", "version": 1, "made_with": "ocrdoc 0.3.0",
+{"format": "ocrdoc-config", "version": 1, "made_with": "ocrdoc 0.4.0",
  "input": {"sha256": "…", "bytes": 245678, "suffix": ".pdf",
            "pages": [{"width": 595.276, "height": 841.89, "frame": "…"}]},
  "options": {"reader": "auto", "languages": null, "tables": true, "structure": true,
@@ -258,13 +273,19 @@ row lines (`rows`, y) and its merged cells, each as first row, first column, las
 column, counted from 0. Changing the filters of a page drops what OCR read on it and the areas
 found there; a person's areas and correction stay.
 
+For a picture the document is the same (`suffix` is the picture's, a page is a picture of the
+file), and it lies beside the picture only. Its sizes and boxes are in points of the picture
+looked at as a page (upright, the long side 842 points; above): the unit ocrdoc works in and
+optdoc's plans are in. Only the reading, which is for other programs, gives a picture's boxes in
+pixels.
+
 **The same file and the same document give the same four files, byte for byte**, on the same
 version of ocrdoc: the text is made from the words stored (OCR, which is not always
 deterministic, does not run again), the tables from the areas stored (Camelot does not run again
 either), and the PDF carries no time and a file identifier made from the configuration documents
 it carries. A page whose words are not stored yet (a document saved before that page was read) is
 read when the result is made. The tests check the bytes for `run`, `run --config` with the
-document and with the PDF, and `edit`.
+document and with the PDF, and `edit`, and for pictures of five types.
 
 **When the step before changed.** A person may go back to optdoc and change a page (more
 contrast); optdoc's PDF, ocrdoc's input, is then another file, and the document's SHA-256 no
@@ -277,12 +298,17 @@ drew, a table grid they set, the text they corrected), and what a machine found 
 the answer names the page in `dropped`. An input without frames must be the very file the
 document names (`config-mismatch` otherwise).
 
+A picture carries nothing, so optdoc's document lies beside the picture optdoc wrote
+(`<stem>.optdoc.json`, in the folder optdoc wrote both into), and ocrdoc reads the frames from
+there. It takes the document beside a picture at its word, as it does the one inside a PDF.
+
 ## Failures
 
 ```json
-{"interface": 2, "made_with": "ocrdoc 0.3.0", "error": "not-pdf", "details": {},
- "message": {"en": "ocrdoc reads PDFs; optdoc makes one of a photo or an image first.",
-             "de": "ocrdoc liest PDFs; aus einem Foto oder Bild macht optdoc zuerst eines."}}
+{"interface": 3, "made_with": "ocrdoc 0.4.0", "error": "unsupported",
+ "details": {"suffix": ".docx"},
+ "message": {"en": "ocrdoc cannot open files of type .docx.",
+             "de": "Dateien vom Typ .docx kann ocrdoc nicht öffnen."}}
 ```
 
 A caller decides by `error` and shows `message` in the language of its interface. `details` hold
@@ -291,7 +317,7 @@ what the message is made from, never a path or content.
 | `error` | when | `details` |
 |---|---|---|
 | `missing` | the file (or the configuration document, or the bench folder) does not exist | |
-| `not-pdf` | not a PDF: a photo or an image, which optdoc prepares first | |
+| `unsupported` | neither a PDF nor a picture ocrdoc can open (a HEIC or HEIF photo where pillow-heif is not installed: `heic` in `about`) | `suffix` |
 | `unreadable` | the file cannot be read: damaged, empty, or not what its name says | |
 | `encrypted` | the PDF needs a password | |
 | `unknown-reader` | an engine ocrdoc does not know | `name` |
@@ -300,7 +326,7 @@ what the message is made from, never a path or content.
 | `bad-config` | the document is no readable JSON, not of this version, has no entry for each page, or a value of the wrong kind | `reason`: `json`, `format`, `page`, `field` |
 | `config-mismatch` | the document belongs to another file, and no frame says the pages are the same | |
 | `not-ocr` | a correction of a page that was not read by OCR (as a library) | `page` |
-| `same-as-source` | the PDF would overwrite the document itself | |
+| `same-as-source` | the document written would replace the one that was read (a picture keeps its name, so `<folder>` must not be its own) | |
 | `unwritable` | the folder cannot take the results | |
 | `cancelled` | the person cancelled the window; nothing was written | |
 | `no-gui` | `edit`, and PySide6 is not installed | |
@@ -314,12 +340,12 @@ what the message is made from, never a path or content.
 The same kinds and wording are there for programs that use ocrdoc as a Python library:
 `ocrdoc.errors.OcrdocError` (`kind`, `details`) and `ocrdoc.errors.describe_error(error, "de")`.
 
-## The reading: `ocrdoc-reading`, version 1
+## The reading: `ocrdoc-reading`, version 2
 
 ```json
-{"format": "ocrdoc-reading", "version": 1, "made_with": "ocrdoc 0.3.0",
+{"format": "ocrdoc-reading", "version": 2, "made_with": "ocrdoc 0.4.0",
  "reader": "rapidocr", "input": {"sha256": "…"},
- "pages": [{"page": 1, "width": 595.28, "height": 841.89, "source": "ocr",
+ "pages": [{"page": 1, "unit": "pt", "width": 595.28, "height": 841.89, "source": "ocr",
             "text": "Kalium\t5,8\tmmol/l\t3,5 - 5,1\tH\n…", "markdown": "…",
             "words": [{"text": "Kalium", "start": 0, "end": 6,
                        "box": [56.2, 210.4, 89.9, 221.0], "confidence": 0.998, "by": "ocr"}],
@@ -332,13 +358,20 @@ The same kinds and wording are there for programs that use ocrdoc as a Python li
                                   "…"]]}]}]}
 ```
 
-The content of optdoc 0.6.0's `optdoc-reading` version 1, without its clean-up `plan` (optdoc's
-now) and without the input's file name (a name may name a patient, and the reading belongs to the
-PDF beside it); `input` names the input by its SHA-256 instead.
+**From version 1:** every page says the `unit` of its size and boxes. Version 1 had points only,
+since ocrdoc read PDFs only. The reading holds no file name (a name may name a patient, and the
+reading belongs to the document beside it); `input` names the input by its SHA-256.
 
-Per page: its size in points, where its text came from (`text` layer or `ocr`), the text, its
-Markdown, and every word with its offsets in the text and its `box` as **[left, top, right,
-bottom] in points from the top left of the page as shown**, the same page as in the PDF. OCR words
+Per page: its `unit`, its size in that unit, where its text came from (`text` layer or `ocr`),
+the text, its Markdown, and every word with its offsets in the text and its `box` as **[left,
+top, right, bottom] from the top left of the page as shown**:
+
+- **a page of a PDF: `"unit": "pt"`**, points, the same page as in the PDF ocrdoc writes;
+- **a picture: `"unit": "px"`**, the picture's own pixels, upright as its EXIF orientation says,
+  to a tenth of a pixel; `width` and `height` are the picture's size in pixels. A program that
+  draws on the picture, or cuts a value out of it, takes the boxes as they are.
+
+The areas and the cells of tables are in the same unit as the words. OCR words
 carry the engine's `confidence` (0 to 1) and `by`: `"ocr"`, or `"person"` for a word a person
 wrote in the window (confidence 1). In the text, a line of the page is a line; on a page read by
 OCR, a gap wider than the words are high (between the cells of a table, or columns) is a tab.
@@ -354,11 +387,14 @@ person marked (a pseudonymiser: handwriting, stamps, barcodes) takes the boxes f
 "person") and its `rows`, top to bottom, each a list of cells from left to right: `text` (the
 words whose middle lies in the cell, lines joined by a space; empty for an empty cell or one
 covered by merged cells, of which the first holds the text and the box of all) and `box`, in the
-same points as the words. Every row is given once, even where Camelot found a table twice.
+same unit as the words. Every row is given once, even where Camelot found a table twice.
 `tables` is `[]` when the page has none and `null` when tables were neither looked for nor set by
 a person.
 
 ## The text layer
+
+A picture gets none: it has no place for text, and stays as it came. To have the text inside the
+document, bind the picture into a PDF first (typdoc) and read that.
 
 On every page read by OCR, the PDF carries the words invisibly where they are printed, one OCR
 line as one line of text, with real spaces between the words. Within a cell of a table the space

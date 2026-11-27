@@ -207,14 +207,14 @@ def test_text_layer_pages(report: Path) -> None:
         project.close()
 
 
-def test_only_pdfs(tmp_path: Path, report: Path) -> None:
-    """A photo or an image goes through optdoc first."""
-    with pymupdf.open(report) as doc:
-        image = tmp_path / "photo.png"
-        doc[0].get_pixmap(dpi=50).save(image)
+def test_what_is_neither_a_pdf_nor_a_picture(tmp_path: Path) -> None:
+    """A PDF is read, a picture too (``tests/test_pictures.py``); anything else is not."""
+    word = tmp_path / "brief.docx"
+    word.write_bytes(b"PK")
     with pytest.raises(OcrdocError) as caught:
-        Project.open(image)
-    assert caught.value.kind == "not-pdf" and "optdoc" in caught.value.message("de")
+        Project.open(word)
+    assert caught.value.kind == "unsupported" and caught.value.details == {"suffix": ".docx"}
+    assert "ocrdoc" in caught.value.message("de")
 
 
 def test_refused_configurations(tmp_path: Path, report: Path) -> None:

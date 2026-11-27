@@ -1,7 +1,7 @@
 """The test bench: how well ocrdoc reads documents whose content is known.
 
-A bench folder holds PDFs (scans, pages optdoc prepared from photos) and, next to each, a
-truth file
+A bench folder holds documents (PDFs: scans, pages optdoc prepared from photos; and
+pictures, read as they are) and, next to each, a truth file
 ``<stem>.truth.txt``: one line per item worth checking, written as it is printed
 ("Kalium 5,8 mmol/l 3,5 - 5,1 H"); empty lines and lines starting with ``#`` are
 skipped.  :func:`bench` reads every document and compares each truth line with the
@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ocrdoc import loading
 from ocrdoc import ocr as ocrlib
 from ocrdoc.errors import OcrdocError
 from ocrdoc.filters import Filters
@@ -48,7 +49,7 @@ from ocrdoc.pagetext import PageText
 
 TRUTH_SUFFIX = ".truth.txt"
 CELLS_SUFFIX = ".cells.json"
-DOCUMENT_SUFFIXES = {".pdf"}
+DOCUMENT_SUFFIXES = {".pdf", *loading.PICTURES}
 _NUMBER = re.compile(r"[<>≤≥]?\d+(?:[.,]\d+)?")
 
 

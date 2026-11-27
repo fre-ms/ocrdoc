@@ -1,11 +1,13 @@
 # ocrdoc
 
-ocrdoc recognises what is on the pages of a PDF and leaves the pages as they are. It divides every
-page into areas (text, tables with their grid, pictures, barcodes, handwriting, stamps, areas not to be
-read), reads the text with word boxes where the page has no text of its own, finds the cells of its
-tables and the content of its barcodes, gives the text structure (paragraphs, lists, tables) and lays
-it invisibly over the page. The result is a searchable PDF and a machine-readable reading that other
-programs can build on. Everything runs on your own computer; nothing is sent anywhere (the command line
+ocrdoc recognises what is on the pages of a PDF, or on a picture, and leaves the document as it is. It
+divides every page into areas (text, tables with their grid, pictures, barcodes, handwriting, stamps,
+areas not to be read), reads the text with word boxes where the page has no text of its own, finds the
+cells of its tables and the content of its barcodes, and gives the text structure (paragraphs, lists,
+tables). In a PDF it lays the text invisibly over the page: the result is a searchable PDF. **A picture
+stays a picture**: it is handed on as it came, byte for byte, and what was read lies beside it. Either
+way there is a machine-readable reading that other programs can build on. Everything runs on your own
+computer; nothing is sent anywhere (the command line
 refuses any attempt to reach the network, and switches off the telemetry ONNX Runtime would otherwise
 queue for Microsoft).
 
@@ -14,22 +16,25 @@ real digital documents, one tool for one step:
 
 | tool | its step |
 |---|---|
+| [typdoc](https://github.com/fre-ms/typdoc) | changes the type, and nothing else: binds pictures into one PDF |
 | [optdoc](https://github.com/fre-ms/optdoc) | makes the page faithful: upright, unwarped, in its true proportions, evenly lit, in its own colours |
-| **ocrdoc** | recognises: areas, text, tables, barcodes |
-| semdoc, tagdoc (planned) | understand the text (medical terms, identifying information) and describe the document |
+| **ocrdoc** | recognises: areas, text, tables, barcodes; lays the text over the page of a PDF, beside a picture |
+| semdoc (planned) | understands the text: medical terms, identifying information |
+| [tagdoc](https://github.com/fre-ms/tagdoc) | describes the document as the standard medRDS says |
+| attdoc (planned) | signs it: a time stamp, a person's signature |
 
 What they share (configuration documents, the command line's manners, no network, the window's building
-blocks) is [doccor](https://github.com/fre-ms/doccor)'s. ocrdoc works on any PDF, optdoc's or another
-program's, and knows nothing of the applications that use it.
+blocks) is [doccor](https://github.com/fre-ms/doccor)'s. No step forces a file type: ocrdoc works on any
+PDF and any picture, optdoc's or another program's, and knows nothing of the applications that use it.
 
-**Status: pre-alpha (0.3.0).** The code comes out of optdoc 0.6.0, with its history, where it read the
-pages optdoc had prepared. `CHANGELOG.md` lists what changed in the move.
+**Status: pre-alpha (0.4.0).** The code comes out of optdoc 0.6.0, with its history, where it read the
+pages optdoc had prepared. `CHANGELOG.md` lists what changed since.
 
 ## Every step can be reproduced and resumed
 
 The configuration document (`<name>.ocrdoc.json`, also inside the PDF ocrdoc writes) holds every
 setting, the filters every page was read through, the words OCR read, the areas found and those a person
-drew, and the person's corrections, and nothing else (no paths, no times). **The same PDF with the same
+drew, and the person's corrections, and nothing else (no paths, no times). **The same file with the same
 document gives the same four files, byte for byte**: OCR and the finders do not run again where their
 results are stored. The window saves the document and opens it again where the person stopped.
 
@@ -39,13 +44,16 @@ original it is made again. When a person goes back and changes a page in optdoc 
 document no longer fits its input by hash; where the page's frame (its geometry, which optdoc records in
 its own document from its version that comes with ocrdoc on) stayed the same, what the person decided in
 ocrdoc stays and what a machine found is found again, and the pages whose frame changed are named.
+A picture carries nothing inside, so there the documents lie beside it (`<name>.optdoc.json`,
+`<name>.ocrdoc.json`), and ocrdoc reads optdoc's frames from the one beside the picture.
 
 ## What it does
 
 - **Reads** with [RapidOCR](https://github.com/RapidAI/RapidOCR) (ONNX models in the wheel, no download) or
   [Tesseract](https://github.com/tesseract-ocr/tesseract), with real word boxes and confidences. Tables with
   ruled grids, which Tesseract's page segmentation tends to drop, are read a second time without their lines.
-  A page with a text layer of its own is read as it is.
+  A page with a text layer of its own is read as it is. A picture (JPEG, PNG, TIFF, HEIC, WebP, BMP,
+  GIF, PNM) is read upright, as its orientation says, every picture of a file as a page.
 - **Filters only its own copy.** What helps OCR (upscaling a coarse scan, a letter mode, taking coloured
   ink or ruled lines away, black and white) is done to ocrdoc's rendering of a page, never to the page:
   the stamp stays in the document. ocrdoc suggests the filters per page; a person can choose them.
@@ -62,12 +70,13 @@ ocrdoc stays and what a machine found is found again, and the pages whose frame 
 - **Writes** a searchable PDF (the input's pages with the recognised words laid invisibly over the printed
   ones, line by line, so that selecting a word in a reader covers it and a program that takes the text out
   gets a row of a table as one line; every character as read, "≤" and "↑" too), the reading as JSON, the
-  text as Markdown, and the configuration document.
+  text as Markdown, and the configuration document. For a picture, the picture itself as it came instead
+  of a PDF, and the reading with its boxes in the picture's own pixels.
 - **Lets a person correct it** in a window (extra `gui`, Qt): the filters of every page, the page as it is
   beside the page as OCR reads it; the areas of the page, to be drawn, moved, resized, given another kind
   or deleted, and a table's grid, whose lines can be added, dragged and taken away and whose cells can be
   merged and split; and the text read by OCR beside the page, uncertain words marked, to be corrected by
-  hand. A correction reaches the PDF's text layer, the reading and the Markdown.
+  hand. A correction reaches the reading, the Markdown and, in a PDF, its text layer.
 
 ## Install
 
@@ -79,7 +88,8 @@ cd ocrdoc
 uv sync --extra ocr --extra tables --extra gui --extra barcodes
 ```
 
-The `ocr` extra brings RapidOCR, ONNX Runtime, OpenCV and NumPy (for the filters and the finders); the
+The `ocr` extra brings RapidOCR, ONNX Runtime, OpenCV and NumPy (for the filters and the finders) and
+pillow-heif (to open HEIC and HEIF photos; every other picture opens without it); the
 `tables` extra brings [Camelot](https://github.com/camelot-dev/camelot), which finds tables with their
 cells; the `barcodes` extra zxing-cpp; the `gui` extra PySide6 (Qt, LGPL 3.0) for the window. Tesseract
 is optional and installed separately (`brew install tesseract tesseract-lang`,
@@ -92,12 +102,14 @@ is [docrepro](https://github.com/fre-ms/docrepro)'s.
 ocrdoc about
 ocrdoc run scan.pdf --out results/
 ocrdoc run scan.pdf --reader tesseract --languages deu+eng
+ocrdoc run photo.jpg --out results/
 ocrdoc edit scan.pdf --out results/ --language en
 ocrdoc edit scan.pdf --out results/ --config results/scan.ocrdoc.json
 ```
 
 `run` writes `<name>.pdf`, `<name>.reading.json`, `<name>.md` and `<name>.ocrdoc.json` into the folder
-given and nowhere else. `edit` opens the window; *Apply* writes the same four files, *Save and continue
+given and nowhere else; for a picture, the picture as it came (`<name>.jpg`) in the place of the PDF.
+`edit` opens the window; *Apply* writes the same four files, *Save and continue
 later* the configuration document alone, *Cancel* nothing. `--config` (a `<name>.ocrdoc.json` or a PDF
 ocrdoc wrote) starts from a configuration document instead of ocrdoc's suggestions, for `run` and `edit`
 alike. Every command answers with one JSON object on standard output, so that programs in any language
@@ -120,14 +132,15 @@ with `ocrdoc.settings.set_settings`.
 
 ## Test bench
 
-`ocrdoc bench <folder>` scores the readings of PDFs whose content is known. Next to every PDF lies a truth
-file `<name>.truth.txt`, one line per item as it is printed (`Kalium 5,8 mmol/l 3,5 - 5,1 H`). The answer
+`ocrdoc bench <folder>` scores the readings of documents whose content is known, PDFs and pictures. Next to
+each lies a truth file `<name>.truth.txt`, one line per item as it is printed (`Kalium 5,8 mmol/l 3,5 - 5,1 H`). The answer
 is numbers only (rows found word for word, numbers read right in their own row, rows with every number
-right, similarity, engine confidence), per document and per engine. Documents are named by their position,
-never by file name, and no word of a document or a truth file is printed, not even in an error. So the
+right, similarity, engine confidence), per document and per engine. Documents are named by their position
+and their type, never by file name, and no word of a document or a truth file is printed, not even in an error. So the
 bench can run on real documents on your own computer while only the figures are shared.
 
-Invented laboratory reports to print and scan (a photo goes through optdoc first):
+Invented laboratory reports to print, and to scan or photograph (a photo is read as it is; it reads
+better once optdoc has made it faithful):
 
 ```
 uv run python bench/lab_reports.py reports/ 6     # reports/lab-01.pdf … and lab-01.truth.txt …

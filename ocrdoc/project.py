@@ -40,7 +40,7 @@ import pymupdf
 from doccor import documents
 from doccor.errors import DocError
 
-from ocrdoc import __version__, areas, layout, tables, textlayer
+from ocrdoc import __version__, areas, layout, loading, tables, textlayer
 from ocrdoc import filters as filtering
 from ocrdoc import ocr as ocrlib
 from ocrdoc.alignment import align_correction
@@ -148,38 +148,24 @@ def config_bytes(config: dict[str, Any]) -> bytes:
     return documents.document_bytes(config)
 
 
-def open_pdf(path: Path) -> pymupdf.Document:
-    """A PDF to read, every page upright (``/Rotate`` taken into its content, which looks
-    the same).  Raises "missing", "not-pdf" (photos and images go through
-    optdoc first), "encrypted", "unreadable"."""
-    if not path.is_file():
-        raise OcrdocError("missing")
-    if path.suffix.lower() != ".pdf":
-        raise OcrdocError("not-pdf")
-    try:
-        doc = pymupdf.open(path)
-    except Exception as e:  # MuPDF words its failures with the file's name
-        raise OcrdocError("unreadable") from e
-    if doc.needs_pass:
-        doc.close()
-        raise OcrdocError("encrypted")
-    if doc.page_count == 0:
-        doc.close()
-        raise OcrdocError("unreadable")
-    for page in doc.pages():
-        if page.rotation:
-            page.remove_rotation()
-    return doc
-
-
-def _frames(doc: pymupdf.Document) -> list[str | None]:
+def _frames(doc: pymupdf.Document, source: Path) -> list[str | None]:
     """The frame of every page, from the configuration document of the step that
-    prepared the input (optdoc's, embedded); None where there is none."""
+    prepared the input: optdoc's, which a PDF carries inside and which lies beside a
+    picture (``<stem>.optdoc.json``, where optdoc wrote both); None where there is none.
+    The document beside a picture is taken at its word, as the one inside a PDF is."""
     frames: list[str | None] = [None] * len(doc)
     try:
-        if UPSTREAM not in doc.embfile_names():
+        if loading.is_picture(source):
+            beside = source.with_name(f"{source.stem}.{UPSTREAM}")
+            if not beside.is_file():
+                return frames
+            upstream = json.loads(beside.read_text(encoding="utf-8"))
+            if not isinstance(upstream, dict) or upstream.get("format") != "optdoc-config":
+                return frames
+        elif UPSTREAM not in doc.embfile_names():
             return frames
-        upstream = json.loads(doc.embfile_get(UPSTREAM).decode("utf-8"))
+        else:
+            upstream = json.loads(doc.embfile_get(UPSTREAM).decode("utf-8"))
         for k, page in enumerate(upstream.get("pages", [])[:len(doc)]):
             frame = page.get("frame") if isinstance(page, dict) else None
             frames[k] = frame if isinstance(frame, str) else None
@@ -195,12 +181,14 @@ class Project:
     def __init__(self, source: Path, doc: pymupdf.Document, sha256: str, size: int,
                  options: Options) -> None:
         self.source = source
-        self.doc = doc  # every page upright, as it came
+        self.picture = loading.is_picture(source)  # it stays one: the reading lies beside it
+        self.pixels = loading.pixel_sizes(source) if self.picture else None
+        self.doc = doc  # every page upright, as it came (a picture: looked at as pages)
         self.sha256 = sha256
         self.size = size
         self.options = options
         self.pages = [_Page() for _ in range(len(doc))]
-        self.frames = _frames(doc)
+        self.frames = _frames(doc, source)
         self.dropped: list[int] = []  # pages whose decisions went: their frame changed
         self.scratch: Path | None = None  # where a page may be written for a moment
         self.models: Path | None = None  # the folder of models the finders may use
@@ -214,11 +202,12 @@ class Project:
     @classmethod
     def open(cls, source: str | Path, options: Options | None = None,
              config: dict[str, Any] | None = None) -> Project:
-        """A project on ``source`` (a PDF): fresh with ``options``, or as ``config`` left
-        it (whose settings then count).  Raises "config-mismatch" when the document
-        belongs to another file and no frame says the pages are the same."""
+        """A project on ``source`` (a PDF, or a picture): fresh with ``options``, or as
+        ``config`` left it (whose settings then count).  Raises "config-mismatch" when the
+        document belongs to another file and no frame says the pages are the same, and
+        what :func:`ocrdoc.loading.open_document` raises."""
         source = Path(source)
-        doc = open_pdf(source)
+        doc = loading.open_document(source)
         sha256 = documents.digest(source)
         if config is not None:
             options = Options.from_dict(config.get("options", {}))
@@ -631,7 +620,7 @@ class Project:
         if not self.finds_tables() and not any(s.tables for s in pages):
             found = None  # not looked for
         return Reading(self.source, doc, pages, self.reader_name(), tables=found,
-                       config=self.config(), carried=carried(doc))
+                       config=self.config(), carried=carried(doc), pixels=self.pixels)
 
     def _page_reading(self, doc: pymupdf.Document, n: int) -> PageReading:
         """One page of the result: its text, and the tables of its table regions made
@@ -699,4 +688,4 @@ def _tables(regions: list[layout.Region], text: PageText) -> list[Table]:
 
 
 __all__ = ["EMBEDDED", "FORMAT", "FORMAT_VERSION", "SUFFIX", "Options", "Project",
-           "carried", "config_bytes", "load_config", "open_pdf"]
+           "carried", "config_bytes", "load_config"]

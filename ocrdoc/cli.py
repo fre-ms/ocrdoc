@@ -26,13 +26,13 @@ from typing import Any
 from doccor import cli as frame
 from doccor import models as modelstore
 
-from ocrdoc import __version__, areas, filters, tables
+from ocrdoc import __version__, areas, filters, loading, tables
 from ocrdoc import ocr as ocrlib
 from ocrdoc.errors import OcrdocError
 from ocrdoc.models import CATALOGUE
 from ocrdoc.project import SUFFIX, Options, Project, load_config
 
-INTERFACE = 2  # the version of docs/interface.md the answers follow
+INTERFACE = 3  # the version of docs/interface.md the answers follow
 TOOL = "ocrdoc"
 
 
@@ -43,6 +43,7 @@ def _about(args: argparse.Namespace) -> dict[str, Any]:
     return {"version": __version__, "readers": ocrlib.available_backends(),
             "filters": filters.available(), "tables": tables.available(),
             "barcodes": areas.barcodes_available(), "window": gui.available(),
+            "heic": loading.heic_available(),
             "models": modelstore.listing(CATALOGUE)}
 
 
@@ -147,7 +148,9 @@ def _bench(args: argparse.Namespace) -> dict[str, Any]:
 def _document_options(pr: argparse.ArgumentParser) -> None:
     """The options of run and edit.  The settings default to None, so that the use of one
     beside ``--config`` can be told."""
-    pr.add_argument("file", type=Path, help="a PDF (a page optdoc prepared, a scan, any PDF)")
+    pr.add_argument("file", type=Path,
+                    help="a PDF (a page optdoc prepared, a scan, any PDF), or a picture, "
+                         "which stays a picture: its reading is laid beside it")
     pr.add_argument("--out", type=Path, help="folder for the results (default: <file>.ocrdoc/)")
     pr.add_argument("--config", type=Path,
                     help="configuration to start from: <name>.ocrdoc.json, or a PDF ocrdoc wrote")
@@ -172,12 +175,12 @@ def _document_options(pr: argparse.ArgumentParser) -> None:
 def _parser() -> argparse.ArgumentParser:
     """The argument parser."""
     p = frame.Parser(prog=TOOL,
-                     description="Recognise what is on the pages of a PDF: areas, text, "
-                                 "tables, barcodes.")
+                     description="Recognise what is on the pages of a PDF or on a "
+                                 "picture: areas, text, tables, barcodes.")
     p.add_argument("--version", action="version", version=f"{TOOL} {__version__}")
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("about", help="what this installation can do: OCR engines, finders, window")
-    ru = sub.add_parser("run", help="read a PDF and write the results")
+    ru = sub.add_parser("run", help="read a PDF or a picture and write the results")
     _document_options(ru)
     ed = sub.add_parser("edit", help="open the window: check the areas, correct the text")
     _document_options(ed)
@@ -186,7 +189,8 @@ def _parser() -> argparse.ArgumentParser:
     ed.add_argument("--self-test", action="store_true", help=argparse.SUPPRESS)
     frame.add_models(sub, TOOL)
     be = sub.add_parser("bench", help="score readings against truth files (numbers only)")
-    be.add_argument("folder", type=Path, help="PDFs with a <name>.truth.txt next to each")
+    be.add_argument("folder", type=Path,
+                    help="PDFs and pictures with a <name>.truth.txt next to each")
     be.add_argument("--reader", action="append", choices=["rapidocr", "tesseract"],
                     help="engine to score; repeatable (default: every installed engine)")
     return p

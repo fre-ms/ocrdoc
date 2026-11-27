@@ -39,7 +39,8 @@ def test_scan_becomes_searchable(tmp_path: Path, report: Path) -> None:
     assert any(abs(r.x0 - bounds.x0) < 3 and r.y0 < bounds.y1 and r.y1 > bounds.y0
                for r in found), (found, bounds)
     reading_json = json.loads(paths["reading"].read_text(encoding="utf-8"))
-    assert reading_json["format"] == "ocrdoc-reading" and reading_json["version"] == 1
+    assert reading_json["format"] == "ocrdoc-reading" and reading_json["version"] == 2
+    assert all(page["unit"] == "pt" for page in reading_json["pages"])  # a PDF: points
     json_page = reading_json["pages"][0]
     assert json_page["source"] == "ocr" and json_page["page"] == 1
     word = next(w for w in json_page["words"] if w["text"] == "Diagnosen:")

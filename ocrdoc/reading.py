@@ -55,7 +55,9 @@ class Reading:
     engine used (None without one), the tables of its pages by page number (None when
     they were not looked for), the configuration that makes it again
     (:mod:`ocrdoc.project`), and the configuration documents of the steps before, which
-    the input carried (by their names in it, ``optdoc.json``).  Call :meth:`close` when
+    the input carried (by their names in it, ``optdoc.json``).  For a picture, which
+    stays a picture, ``pixels`` holds the size of every picture in the file (upright, in
+    its own pixels): the reading gives its boxes in those.  Call :meth:`close` when
     done."""
 
     source: Path
@@ -65,6 +67,7 @@ class Reading:
     tables: dict[int, list[Table]] | None = None
     config: dict[str, Any] | None = None
     carried: dict[str, bytes] = field(default_factory=dict)
+    pixels: list[tuple[int, int]] | None = None
 
     @property
     def without_text(self) -> list[int]:

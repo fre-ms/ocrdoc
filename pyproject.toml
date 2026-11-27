@@ -1,7 +1,7 @@
 [project]
 name = "ocrdoc"
-version = "0.3.0"
-description = "Recognises what is on the pages of a PDF: areas, OCR with word boxes, tables, barcodes; the pages stay as they are, the result is reproducible."
+version = "0.4.0"
+description = "Recognises what is on the pages of a PDF or on a picture: areas, OCR with word boxes, tables, barcodes; the document stays as it is, the result is reproducible."
 readme = "README.md"
 requires-python = ">=3.12"
 license = "AGPL-3.0-or-later"
@@ -24,11 +24,14 @@ dependencies = [
   # <2: PyMuPDF 2.0 (MuPDF 1.28.5) shifts glyphs after a redaction; ocrdoc's pages are
   # redacted by PseudonyMed, so both pin the same range
   "pymupdf>=1.25,<2",
+  # a picture is read as a picture: Pillow opens it (PNG, TIFF, WebP … as well as JPEG)
+  "pillow>=11",
 ]
 
 [project.optional-dependencies]
 # RapidOCR brings OpenCV and NumPy, which the filters and the finders need as well
-ocr = ["rapidocr>=3", "onnxruntime>=1.18", "pillow>=10"]
+# pillow-heif: HEIC and HEIF photos are read as well
+ocr = ["rapidocr>=3", "onnxruntime>=1.18", "pillow-heif>=0.18"]
 tables = [
     "camelot-py>=2.2",
 ]

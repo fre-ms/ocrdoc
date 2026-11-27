@@ -51,8 +51,8 @@ def test_reports_and_truth(tmp_path: Path) -> None:
 @pytest.mark.skipif(not ocrlib.available_backends(), reason="kein OCR-Backend installiert")
 def test_bench_on_scans_says_numbers_only(tmp_path: Path,
                                           capsys: pytest.CaptureFixture[str]) -> None:
-    """Scans of the reports, under names that must not come back: the bench answers
-    with figures, no file name, no word of the reports."""
+    """Scans of the reports, two as PDFs and one as a picture, under names that must not
+    come back: the bench answers with figures, no file name, no word of the reports."""
     source = tmp_path / "made"
     lab_reports.make(source, 3, seed=3)
     bench_folder = tmp_path / "bench"
@@ -60,15 +60,20 @@ def test_bench_on_scans_says_numbers_only(tmp_path: Path,
     for i, pdf in enumerate(sorted(source.glob("*.pdf")), 1):
         name = f"Musterfrau_Erika_{i}"
         with pymupdf.open(pdf) as doc:
-            scan = rasterise(doc, dpi=200)
-            scan.save(bench_folder / f"{name}.pdf")
-            scan.close()
+            if i == 3:  # a picture is a document of the bench as well
+                doc[0].get_pixmap(dpi=200, alpha=False).save(bench_folder / f"{name}.png")
+            else:
+                scan = rasterise(doc, dpi=200)
+                scan.save(bench_folder / f"{name}.pdf")
+                scan.close()
         (bench_folder / f"{name}.truth.txt").write_text(
             (source / f"{pdf.stem}.truth.txt").read_text(encoding="utf-8"), encoding="utf-8")
     assert main(["bench", str(bench_folder)]) == 0
     out = capsys.readouterr().out
     answer = json.loads(out)
     assert answer["documents_found"] == 3
+    assert sorted({d["suffix"] for d in answer["documents"]}) == [".pdf", ".png"]
+    assert not any("error" in d for d in answer["documents"])
     for word in ("Musterfrau", "Erika", "Kalium", "Natrium", "Labor", "mmol"):
         assert word not in out, word
     for reader, total in answer["totals"].items():

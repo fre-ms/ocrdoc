@@ -27,8 +27,8 @@ WORDS: dict[str, tuple[str, str]] = {  # key: (English, German)
     "read_all": ("Every page read.", "Alle Seiten gelesen."),
     "failed": ("That did not work: {error}", "Das ging nicht: {error}"),
     # filters
-    "filters_page": ("The page as it is (it stays so in the PDF)",
-                     "Die Seite, wie sie ist (so bleibt sie im PDF)"),
+    "filters_page": ("The page as it is (it stays so in the document)",
+                     "Die Seite, wie sie ist (so bleibt sie im Dokument)"),
     "filters_ocr": ("As OCR reads it (the filters change only this copy; Shift/Option + drag "
                     "moves both views)",
                     "So liest sie die Texterkennung (die Filter ändern nur diese Kopie; "
@@ -83,10 +83,11 @@ WORDS: dict[str, tuple[str, str]] = {  # key: (English, German)
                    "Die Seite, wie die Texterkennung sie gelesen hat (Klick auf ein Wort findet "
                    "es im Text; gelb: unsicher gelesen)"),
     "text_ocr": ("Recognised text, to be corrected by hand. A gap between table cells is a tab; "
-                 "the correction goes into the PDF's text layer, the reading and the Markdown.",
+                 "the correction goes into the reading, the Markdown and, in a PDF, its "
+                 "text layer.",
                  "Erkannter Text, von Hand zu berichtigen. Eine Lücke zwischen Tabellenzellen ist "
-                 "ein Tabulator; die Berichtigung kommt in die Textebene des PDFs, die Lesung "
-                 "und das Markdown."),
+                 "ein Tabulator; die Berichtigung kommt in die Lesung, das Markdown und, bei "
+                 "einem PDF, in dessen Textebene."),
     "text_layer": ("Text of the text layer (cannot be changed)",
                    "Text der Textebene (nicht veränderbar)"),
     "text_none": ("No text on this page.", "Kein Text auf dieser Seite."),
