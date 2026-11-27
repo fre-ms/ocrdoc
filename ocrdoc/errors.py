@@ -16,19 +16,6 @@ from doccor import errors as _core
 from doccor.errors import LANGUAGES, REASONS, DocError, describe_error
 
 _OWN: dict[str, dict[str, str]] = {
-    "unsupported": {  # worded as optdoc and typdoc word it
-        "en": "{tool} cannot open files of type {suffix}.",
-        "de": "Dateien vom Typ {suffix} kann {tool} nicht öffnen.",
-    },
-    "unreadable": {
-        "en": "The file cannot be read; it may be damaged or not what its name says.",
-        "de": "Die Datei lässt sich nicht lesen; sie ist vielleicht beschädigt oder nicht, "
-              "was ihr Name sagt.",
-    },
-    "encrypted": {
-        "en": "The PDF is protected by a password.",
-        "de": "Das PDF ist mit einem Kennwort geschützt.",
-    },
     "unknown-reader": {
         "en": "Unknown OCR engine: {name} (auto, rapidocr, tesseract, none).",
         "de": "Unbekannte Texterkennung: {name} (auto, rapidocr, tesseract, none).",

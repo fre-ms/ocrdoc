@@ -32,7 +32,12 @@ PDF and hands it on as it came. Interface 3; `ocrdoc-reading` version 2.
   (medRDS 9.5) and optdoc looks at: the same picture is read the same whether ocrdoc is handed
   the picture or typdoc's PDF of it. The configuration document holds its boxes in points of that
   page, as it does for a PDF.
-- `ocrdoc.loading.open_document` opens a PDF or a picture.
+- `ocrdoc.loading.open_document` opens a PDF or a picture. The page of a picture is doccor's
+  (`doccor.pictures`, 0.3.0), the same in every tool; a JPEG is one picture, whatever else it
+  carries (a phone's JPEG may hold a second image beside the photo, a gain map, which is no
+  page), and a TIFF stored on its side is read upright with its size named right.
+- The kinds of error `unsupported`, `unreadable` and `encrypted` are worded in doccor, with the
+  same words as before.
 
 ### Removed
 

@@ -217,6 +217,32 @@ def test_a_picture_on_the_command_line(tmp_path: Path, report: Path,
     assert json.loads(capsys.readouterr().out)["error"] == "same-as-source"
 
 
+def test_one_page_for_a_phones_jpeg_and_a_tiff_on_its_side(tmp_path: Path, report: Path) -> None:
+    """A phone's JPEG may carry a second image beside the photo (a gain map for bright
+    screens): it is one picture and one page.  A TIFF stored on its side is read upright,
+    and the size named is the upright picture's."""
+    from PIL import Image
+
+    from ocrdoc.project import Options
+
+    first = _picture(report, tmp_path / "seite.png")
+    with Image.open(first) as page:
+        page.convert("RGB").save(tmp_path / "foto.jpg", format="MPO", save_all=True,
+                                 append_images=[Image.new("RGB", (310, 438), (128, 128, 128))])
+        exif = Image.Exif()
+        exif[0x0112] = 6
+        page.rotate(90, expand=True).save(tmp_path / "scan.tiff", exif=exif,
+                                          compression="tiff_lzw")
+    for name in ("foto.jpg", "scan.tiff"):
+        project = Project.open(tmp_path / name, Options(reader="none"))
+        try:
+            assert len(project.pages) == 1 and project.pixels == [(1240, 1755)], name
+            rect = project.doc[0].rect
+            assert rect.height == pytest.approx(842, abs=0.01) and rect.width < rect.height
+        finally:
+            project.close()
+
+
 def test_what_is_no_picture(tmp_path: Path) -> None:
     """A file named a picture that is none is unreadable, whatever its type."""
     for name in ("foto.png", "foto.webp", "foto.tiff", "foto.jpg"):

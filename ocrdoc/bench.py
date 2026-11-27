@@ -41,7 +41,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ocrdoc import loading
+from doccor import pictures
+
 from ocrdoc import ocr as ocrlib
 from ocrdoc.errors import OcrdocError
 from ocrdoc.filters import Filters
@@ -49,7 +50,7 @@ from ocrdoc.pagetext import PageText
 
 TRUTH_SUFFIX = ".truth.txt"
 CELLS_SUFFIX = ".cells.json"
-DOCUMENT_SUFFIXES = {".pdf", *loading.PICTURES}
+DOCUMENT_SUFFIXES = {".pdf", *pictures.SUFFIXES}
 _NUMBER = re.compile(r"[<>≤≥]?\d+(?:[.,]\d+)?")
 
 
